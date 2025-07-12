@@ -12,7 +12,7 @@ export const challengeRouter = createTRPCRouter({
   getAll: protectedProcedure
     .input(
       z.object({
-        status: z.enum(["DRAFT", "ACTIVE", "PAUSED", "ARCHIVED"]).optional(),
+        status: z.enum(["DRAFT", "ACTIVE", "PAUSED", "ARCHIVED"]).nullish(),
         limit: z.number().min(1).max(100).default(50),
         cursor: z.string().optional(),
       }),
