@@ -20,6 +20,7 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useDisclosure } from "@mantine/hooks";
+import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
   IconAlertCircle,
@@ -123,6 +124,24 @@ export default function ChallengeDetailPage() {
     },
   });
 
+  const removeCandidateMutation = api.challenge.removeCandidate.useMutation({
+    onSuccess: () => {
+      notifications.show({
+        title: "Success",
+        message: "Candidate removed successfully",
+        color: "green",
+      });
+      refetch();
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Error",
+        message: error.message,
+        color: "red",
+      });
+    },
+  });
+
   // Forms
   const candidateForm = useForm<CandidateFormData>({
     initialValues: {
@@ -163,6 +182,25 @@ export default function ChallengeDetailPage() {
 
   const handleSendReminder = (candidateId: string) => {
     sendReminderMutation.mutate({ candidateId });
+  };
+
+  const handleRemoveCandidate = (
+    candidateId: string,
+    candidateName: string,
+  ) => {
+    modals.openConfirmModal({
+      title: "Remove Candidate",
+      children: (
+        <Text size="sm">
+          Are you sure you want to remove <strong>{candidateName}</strong> from
+          this challenge? This action cannot be undone and will permanently
+          delete their submission data.
+        </Text>
+      ),
+      labels: { confirm: "Remove", cancel: "Cancel" },
+      confirmProps: { color: "red" },
+      onConfirm: () => removeCandidateMutation.mutate({ candidateId }),
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -502,6 +540,9 @@ export default function ChallengeDetailPage() {
                                     </Menu.Item>
                                     <Menu.Item
                                       leftSection={<IconCopy size={14} />}
+                                      onClick={() =>
+                                        copyLinkToClipboard(candidate.token)
+                                      }
                                     >
                                       Copy Link
                                     </Menu.Item>
@@ -509,6 +550,15 @@ export default function ChallengeDetailPage() {
                                     <Menu.Item
                                       leftSection={<IconTrash size={14} />}
                                       color="red"
+                                      onClick={() =>
+                                        handleRemoveCandidate(
+                                          candidate.id,
+                                          candidate.name,
+                                        )
+                                      }
+                                      disabled={
+                                        removeCandidateMutation.isPending
+                                      }
                                     >
                                       Remove Candidate
                                     </Menu.Item>

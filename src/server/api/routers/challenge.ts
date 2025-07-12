@@ -539,4 +539,46 @@ export const challengeRouter = createTRPCRouter({
 
       return { success: true };
     }),
+
+  // Remove candidate from challenge
+  removeCandidate: protectedProcedure
+    .input(z.object({ candidateId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.session.user.organizationId) {
+        throw new Error("User not associated with an organization");
+      }
+
+      // Check if user can remove candidates
+      if (!["ADMIN", "HIRING_MANAGER"].includes(ctx.session.user.role)) {
+        throw new Error(
+          "Only admins and hiring managers can remove candidates",
+        );
+      }
+
+      // Get candidate with challenge data to verify ownership
+      const candidate = await ctx.db.candidate.findUnique({
+        where: { id: input.candidateId },
+        include: {
+          challenge: true,
+        },
+      });
+
+      if (!candidate) {
+        throw new Error("Candidate not found");
+      }
+
+      // Verify challenge belongs to user's organization
+      if (
+        candidate.challenge.organizationId !== ctx.session.user.organizationId
+      ) {
+        throw new Error("Candidate not found");
+      }
+
+      // Delete candidate (this will cascade delete submissions and related data)
+      await ctx.db.candidate.delete({
+        where: { id: input.candidateId },
+      });
+
+      return { success: true };
+    }),
 });
