@@ -37,6 +37,7 @@ import {
   IconPlayerPlay,
   IconPlayerSkipBack,
   IconPlayerSkipForward,
+  IconRestore,
   IconSend,
   IconSettings,
   IconX,
@@ -556,7 +557,7 @@ export default function SubmissionDetailPage() {
                     </ActionIcon>
 
                     <ActionIcon variant="outline" onClick={resetPlayback}>
-                      Reset
+                      <IconRestore size={16} />
                     </ActionIcon>
                   </Group>
 
