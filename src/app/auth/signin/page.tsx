@@ -64,6 +64,12 @@ function SignIn() {
             color: "green",
           });
           router.push(callbackUrl);
+        } else {
+          notifications.show({
+            title: "Sign In Issue",
+            message: "Authentication succeeded but session not found",
+            color: "orange",
+          });
         }
       }
     } catch (_error) {

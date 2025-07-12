@@ -28,6 +28,12 @@ declare module "next-auth" {
   }
 }
 
+interface ExtendedJWT {
+  sub?: string;
+  role?: string;
+  organizationId?: string | null;
+}
+
 const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
@@ -77,7 +83,8 @@ export const authConfig = {
             role: user.role,
             organizationId: user.organizationId,
           };
-        } catch {
+        } catch (error) {
+          console.error("💥 Auth error:", error);
           return null;
         }
       },
@@ -89,14 +96,14 @@ export const authConfig = {
   ],
   adapter: PrismaAdapter(db),
   session: {
-    strategy: "database",
+    strategy: "jwt",
   },
   pages: {
     signIn: "/auth/signin",
     error: "/auth/error",
   },
   callbacks: {
-    async signIn({ user, account, profile: _profile }) {
+    async signIn({ user, account }) {
       // For Google OAuth, check if user has an organization
       if (account?.provider === "google") {
         const existingUser = await db.user.findUnique({
@@ -110,19 +117,27 @@ export const authConfig = {
 
       return true;
     },
-    async session({ session, user }) {
-      if (user) {
+    async session({ session, token }) {
+      if (token && session.user) {
         return {
           ...session,
           user: {
             ...session.user,
-            id: user.id,
-            role: user.role,
-            organizationId: user.organizationId,
+            id: token.sub ?? "",
+            role: (token as ExtendedJWT).role ?? "",
+            organizationId: (token as ExtendedJWT).organizationId ?? null,
           },
         };
       }
       return session;
+    },
+    async jwt({ token, user }) {
+      if (user && "role" in user && "organizationId" in user) {
+        (token as ExtendedJWT).role = user.role;
+        (token as ExtendedJWT).organizationId = user.organizationId;
+      }
+
+      return token;
     },
   },
 } satisfies NextAuthConfig;

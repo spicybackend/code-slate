@@ -1,7 +1,7 @@
 import { auth } from "~/server/auth";
 
 export default auth((req) => {
-  const token = req.auth;
+  const session = req.auth;
   const { pathname } = req.nextUrl;
 
   // Allow access to auth pages without token
@@ -25,7 +25,7 @@ export default auth((req) => {
   }
 
   // For all other routes, require authentication with organization
-  if (!token || !token.user?.organizationId) {
+  if (!session || !session.user?.organizationId) {
     return Response.redirect(new URL("/auth/signin", req.url));
   }
 });
