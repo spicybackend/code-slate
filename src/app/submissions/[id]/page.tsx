@@ -5,6 +5,7 @@ import {
   Alert,
   Avatar,
   Badge,
+  Box,
   Button,
   Card,
   Code,
@@ -584,6 +585,183 @@ export default function SubmissionDetailPage() {
                       </Badge>
                     )}
                   </Group>
+
+                  {/* Focus Loss Indicator */}
+                  <Box mb="xs">
+                    <Group justify="space-between" mb={4}>
+                      <Text size="sm" c="dimmed">
+                        Focus Timeline
+                      </Text>
+                      <Group gap="xs">
+                        <Group gap={4}>
+                          <Box
+                            style={{
+                              width: "12px",
+                              height: "12px",
+                              backgroundColor: "#f8f9fa",
+                              border: "1px solid #e9ecef",
+                              borderRadius: "2px",
+                            }}
+                          />
+                          <Text size="xs" c="dimmed">
+                            Focused
+                          </Text>
+                        </Group>
+                        <Group gap={4}>
+                          <Box
+                            style={{
+                              width: "12px",
+                              height: "12px",
+                              backgroundColor: "#ffc9d6",
+                              borderRadius: "2px",
+                            }}
+                          />
+                          <Text size="xs" c="dimmed">
+                            Unfocused
+                          </Text>
+                        </Group>
+                      </Group>
+                    </Group>
+                    <Box
+                      style={{
+                        position: "relative",
+                        height: "24px",
+                        backgroundColor: "#f8f9fa",
+                        borderRadius: "6px",
+                        border: "1px solid #e9ecef",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {/* Focus loss segments */}
+                      {(() => {
+                        if (!playbackStartTime || totalDuration === 0)
+                          return null;
+
+                        const segments = [];
+                        let currentlyFocused = true;
+                        let lastTime = 0;
+
+                        // Process focus events to create segments
+                        for (const event of focusEvents) {
+                          const eventTime =
+                            new Date(event.timestamp).getTime() -
+                            playbackStartTime.getTime();
+                          const relativePosition =
+                            (eventTime / totalDuration) * 100;
+
+                          // If we're transitioning from unfocused to focused, close the pink segment
+                          if (!currentlyFocused && event.type === "FOCUS_IN") {
+                            const lastPosition =
+                              (lastTime / totalDuration) * 100;
+                            segments.push(
+                              <Box
+                                key={`unfocused-${lastTime}-${eventTime}`}
+                                style={{
+                                  position: "absolute",
+                                  left: `${Math.max(0, lastPosition)}%`,
+                                  width: `${Math.min(100, relativePosition) - Math.max(0, lastPosition)}%`,
+                                  height: "100%",
+                                  backgroundColor: "#ffc9d6",
+                                  borderRadius: "2px",
+                                }}
+                              />,
+                            );
+                          }
+
+                          currentlyFocused = event.type === "FOCUS_IN";
+                          lastTime = eventTime;
+                        }
+
+                        // If we end unfocused, add a final segment
+                        if (!currentlyFocused && lastTime < totalDuration) {
+                          const lastPosition = (lastTime / totalDuration) * 100;
+                          segments.push(
+                            <Box
+                              key={`unfocused-final-${lastTime}`}
+                              style={{
+                                position: "absolute",
+                                left: `${lastPosition}%`,
+                                width: `${100 - lastPosition}%`,
+                                height: "100%",
+                                backgroundColor: "#ffc9d6",
+                                borderRadius: "2px",
+                              }}
+                            />,
+                          );
+                        }
+
+                        return segments;
+                      })()}
+
+                      {/* Current playback position indicator */}
+                      <Box
+                        style={{
+                          position: "absolute",
+                          left: `${totalDuration > 0 ? (playbackTime / totalDuration) * 100 : 0}%`,
+                          width: "3px",
+                          height: "100%",
+                          backgroundColor: "#228be6",
+                          transform: "translateX(-1.5px)",
+                          zIndex: 10,
+                          borderRadius: "1px",
+                          boxShadow: "0 0 2px rgba(34, 139, 230, 0.5)",
+                        }}
+                      />
+                    </Box>
+
+                    {/* Focus Statistics */}
+                    {(() => {
+                      if (
+                        !playbackStartTime ||
+                        totalDuration === 0 ||
+                        focusEvents.length === 0
+                      ) {
+                        return null;
+                      }
+
+                      let totalUnfocusedTime = 0;
+                      let currentlyFocused = true;
+                      let lastTime = 0;
+
+                      for (const event of focusEvents) {
+                        const eventTime =
+                          new Date(event.timestamp).getTime() -
+                          playbackStartTime.getTime();
+
+                        if (!currentlyFocused && event.type === "FOCUS_IN") {
+                          totalUnfocusedTime += eventTime - lastTime;
+                        }
+
+                        currentlyFocused = event.type === "FOCUS_IN";
+                        lastTime = eventTime;
+                      }
+
+                      // If ending unfocused, add remaining time
+                      if (!currentlyFocused) {
+                        totalUnfocusedTime += totalDuration - lastTime;
+                      }
+
+                      const focusPercentage = (
+                        ((totalDuration - totalUnfocusedTime) / totalDuration) *
+                        100
+                      ).toFixed(1);
+                      const unfocusedCount = focusEvents.filter(
+                        (e) => e.type === "FOCUS_OUT",
+                      ).length;
+
+                      return (
+                        <Group justify="space-between" mt={4}>
+                          <Text size="xs" c="dimmed">
+                            Focus: {focusPercentage}% of session
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            Lost focus {unfocusedCount} time
+                            {unfocusedCount !== 1 ? "s" : ""}
+                          </Text>
+                        </Group>
+                      );
+                    })()}
+                  </Box>
 
                   <Slider
                     value={playbackTime}
