@@ -253,21 +253,6 @@ export default function ChallengePage() {
     }, TYPING_INDICATOR_TIMEOUT);
   };
 
-  const handleCopy = () => {
-    // Copy events are now tracked as part of content snapshots
-    // No need for individual copy tracking
-  };
-
-  const handlePaste = (_event: React.ClipboardEvent) => {
-    if (isSubmitted) return;
-    // Paste events will be captured in the next content snapshot
-  };
-
-  const handleSelectionChange = () => {
-    // Selection changes are now tracked as part of content snapshots
-    // No need for individual selection tracking
-  };
-
   const handleSubmit = useCallback(async () => {
     try {
       await submitMutation.mutateAsync({ token });
@@ -456,9 +441,9 @@ export default function ChallengePage() {
             ref={textareaRef}
             value={content}
             onChange={handleTextareaChange}
-            onCopy={handleCopy}
-            onPaste={handlePaste}
-            onSelect={handleSelectionChange}
+            // onCopy={handleCopy}
+            // onPaste={handlePaste}
+            // onSelect={handleSelectionChange}
             placeholder={
               isSubmitted ? "Solution submitted" : "Write your code here..."
             }
