@@ -1,70 +1,77 @@
+"use client";
+
+import { Button, Container, Group, Stack, Text, Title } from "@mantine/core";
+import { IconLogin } from "@tabler/icons-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { useEffect } from "react";
 
-import { LatestPost } from "~/app/_components/post";
-import { auth } from "~/server/auth";
-import { api, HydrateClient } from "~/trpc/server";
-import styles from "./index.module.css";
+export default function HomePage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
 
-export default async function Home() {
-  const hello = await api.post.hello({ text: "from tRPC" });
-  const session = await auth();
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.organizationId) {
+      router.push("/dashboard");
+    }
+  }, [status, session, router]);
 
-  if (session?.user) {
-    void api.post.getLatest.prefetch();
+  if (status === "loading") {
+    return (
+      <Container size="sm" py={80}>
+        <Text ta="center">Loading...</Text>
+      </Container>
+    );
+  }
+
+  if (status === "authenticated") {
+    return (
+      <Container size="sm" py={80}>
+        <Text ta="center">Redirecting to dashboard...</Text>
+      </Container>
+    );
   }
 
   return (
-    <HydrateClient>
-      <main className={styles.main}>
-        <div className={styles.container}>
-          <h1 className={styles.title}>
-            Create <span className={styles.pinkSpan}>T3</span> App
-          </h1>
-          <div className={styles.cardRow}>
-            <Link
-              className={styles.card}
-              href="https://create.t3.gg/en/usage/first-steps"
-              target="_blank"
-            >
-              <h3 className={styles.cardTitle}>First Steps →</h3>
-              <div className={styles.cardText}>
-                Just the basics - Everything you need to know to set up your
-                database and authentication.
-              </div>
-            </Link>
-            <Link
-              className={styles.card}
-              href="https://create.t3.gg/en/introduction"
-              target="_blank"
-            >
-              <h3 className={styles.cardTitle}>Documentation →</h3>
-              <div className={styles.cardText}>
-                Learn more about Create T3 App, the libraries it uses, and how
-                to deploy it.
-              </div>
-            </Link>
-          </div>
-          <div className={styles.showcaseContainer}>
-            <p className={styles.showcaseText}>
-              {hello ? hello.greeting : "Loading tRPC query..."}
-            </p>
-
-            <div className={styles.authContainer}>
-              <p className={styles.showcaseText}>
-                {session && <span>Logged in as {session.user?.name}</span>}
-              </p>
-              <Link
-                href={session ? "/api/auth/signout" : "/api/auth/signin"}
-                className={styles.loginButton}
-              >
-                {session ? "Sign out" : "Sign in"}
-              </Link>
-            </div>
-          </div>
-
-          {session?.user && <LatestPost />}
+    <Container size="sm" py={80}>
+      <Stack align="center" gap="xl">
+        <div style={{ textAlign: "center" }}>
+          <Title order={1} size="h1" mb="md">
+            Welcome to Code Slate
+          </Title>
+          <Text size="lg" c="dimmed" mb="xl">
+            A comprehensive platform for technical interviews and code
+            challenges
+          </Text>
         </div>
-      </main>
-    </HydrateClient>
+
+        <Stack gap="md" align="center">
+          <Text size="md" ta="center" maw={600}>
+            Code Slate helps organizations create, distribute, and review code
+            challenges for technical interviews. Track candidate progress in
+            real-time and make informed hiring decisions.
+          </Text>
+
+          <Group mt="xl">
+            <Button
+              component={Link}
+              href="/auth/signin"
+              size="lg"
+              leftSection={<IconLogin size={20} />}
+            >
+              Sign In to Your Organization
+            </Button>
+          </Group>
+
+          <Text size="sm" c="dimmed" ta="center" mt="md">
+            Need access to an organization?{" "}
+            <Text component="a" href="mailto:admin@example.com" c="blue">
+              Contact your administrator
+            </Text>
+          </Text>
+        </Stack>
+      </Stack>
+    </Container>
   );
 }
