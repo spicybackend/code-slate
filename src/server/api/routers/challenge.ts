@@ -1,5 +1,5 @@
-import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
+import { generateSecureToken } from "~/lib/crypto";
 
 import {
   createTRPCRouter,
@@ -274,7 +274,7 @@ export const challengeRouter = createTRPCRouter({
       }
 
       // Generate unique token for candidate
-      const token = uuidv4();
+      const token = generateSecureToken();
 
       const candidate = await ctx.db.candidate.create({
         data: {

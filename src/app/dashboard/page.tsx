@@ -19,12 +19,12 @@ import {
 import {
   IconAlertCircle,
   IconCircleCheck,
+  IconCircleX,
   IconClipboardList,
   IconClockHour4,
   IconEye,
   IconPlus,
   IconUsers,
-  IconCircleX,
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -82,8 +82,9 @@ function RecentSubmissions() {
           <Text fw={500} size="lg">
             Recent Submissions
           </Text>
-          {[...Array(3)].map(() => (
-            <Skeleton key={crypto.randomUUID()} height={60} />
+          {[...Array(3)].map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: placeholder
+            <Skeleton key={`submission-skeleton-${i}`} height={60} />
           ))}
         </Stack>
       </Card>
@@ -208,8 +209,9 @@ function ActiveChallenges() {
           <Text fw={500} size="lg">
             Active Challenges
           </Text>
-          {[...Array(3)].map(() => (
-            <Skeleton key={crypto.randomUUID()} height={60} />
+          {[...Array(3)].map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: placeholder
+            <Skeleton key={`challenge-skeleton-${i}`} height={60} />
           ))}
         </Stack>
       </Card>
@@ -312,8 +314,9 @@ export default function DashboardPage() {
         {/* Stats Overview */}
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
           {statsLoading ? (
-            [...Array(4)].map(() => (
-              <Skeleton key={crypto.randomUUID()} height={120} />
+            [...Array(4)].map((_, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: placeholder
+              <Skeleton key={`stats-skeleton-${i}`} height={120} />
             ))
           ) : (
             <>

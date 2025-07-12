@@ -1,11 +1,10 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import bcrypt from "bcryptjs";
 import type { DefaultSession, NextAuthConfig } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { z } from "zod";
-
 import { env } from "~/env";
+import { verifyPassword } from "~/lib/crypto";
 import { db } from "~/server/db";
 
 /**
@@ -60,7 +59,7 @@ export const authConfig = {
             return null;
           }
 
-          const isValidPassword = await bcrypt.compare(password, user.password);
+          const isValidPassword = await verifyPassword(password, user.password);
           if (!isValidPassword) {
             return null;
           }

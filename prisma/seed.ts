@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "../src/lib/crypto";
 
 const prisma = new PrismaClient();
 
@@ -20,7 +20,7 @@ async function main() {
   console.log("✅ Created test organization");
 
   // Hash the password
-  const hashedPassword = await bcrypt.hash("P@ssw0rd!", 12);
+  const hashedPassword = await hashPassword("P@ssw0rd!");
 
   // Create admin user
   const adminUser = await prisma.user.upsert({

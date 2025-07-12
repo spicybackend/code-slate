@@ -2,37 +2,37 @@
 
 import {
   ActionIcon,
+  Alert,
+  Avatar,
   Badge,
   Button,
   Card,
   Container,
   Group,
   Menu,
+  Pagination,
+  Select,
   Stack,
   Table,
   Text,
   TextInput,
   Title,
-  Select,
-  Pagination,
-  Avatar,
   Tooltip,
-  Alert,
 } from "@mantine/core";
+import { useDebouncedValue } from "@mantine/hooks";
+import { notifications } from "@mantine/notifications";
 import {
+  IconAlertCircle,
+  IconClipboardList,
+  IconCopy,
   IconDots,
   IconEye,
   IconPencil,
   IconPlus,
   IconSearch,
   IconTrash,
-  IconCopy,
   IconUsers,
-  IconClipboardList,
-  IconAlertCircle,
 } from "@tabler/icons-react";
-import { useDebouncedValue } from "@mantine/hooks";
-import { notifications } from "@mantine/notifications";
 import Link from "next/link";
 import { useState } from "react";
 import { AppShellLayout } from "~/components/AppShell";
@@ -52,7 +52,12 @@ export default function ChallengesPage() {
     isLoading,
     refetch,
   } = api.challenge.getAll.useQuery({
-    status: statusFilter as any,
+    status: statusFilter as
+      | "DRAFT"
+      | "ACTIVE"
+      | "PAUSED"
+      | "ARCHIVED"
+      | undefined,
     limit: pageSize,
   });
 
@@ -98,7 +103,9 @@ export default function ChallengesPage() {
   const filteredChallenges = challenges.filter(
     (challenge) =>
       challenge.title.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      challenge.description.toLowerCase().includes(debouncedSearch.toLowerCase())
+      challenge.description
+        .toLowerCase()
+        .includes(debouncedSearch.toLowerCase()),
   );
 
   const handleDelete = async (challengeId: string) => {
@@ -142,7 +149,9 @@ export default function ChallengesPage() {
           <Group justify="space-between">
             <div>
               <Title order={1}>Challenges</Title>
-              <Text c="dimmed">Manage your code challenges and track submissions</Text>
+              <Text c="dimmed">
+                Manage your code challenges and track submissions
+              </Text>
             </div>
             <Button
               component={Link}
@@ -201,7 +210,9 @@ export default function ChallengesPage() {
                     </Button>
                   </Alert>
                 ) : (
-                  <Text c="dimmed">No challenges match your search criteria.</Text>
+                  <Text c="dimmed">
+                    No challenges match your search criteria.
+                  </Text>
                 )}
               </div>
             ) : (
@@ -214,7 +225,7 @@ export default function ChallengesPage() {
                     <Table.Th>Candidates</Table.Th>
                     <Table.Th>Submissions</Table.Th>
                     <Table.Th>Created</Table.Th>
-                    <Table.Th></Table.Th>
+                    <Table.Th />
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -236,7 +247,10 @@ export default function ChallengesPage() {
                         </div>
                       </Table.Td>
                       <Table.Td>
-                        <Badge color={getStatusColor(challenge.status)} variant="light">
+                        <Badge
+                          color={getStatusColor(challenge.status)}
+                          variant="light"
+                        >
                           {challenge.status}
                         </Badge>
                       </Table.Td>
@@ -255,13 +269,19 @@ export default function ChallengesPage() {
                       </Table.Td>
                       <Table.Td>
                         <Group gap="xs">
-                          <IconUsers size={16} color="var(--mantine-color-dimmed)" />
+                          <IconUsers
+                            size={16}
+                            color="var(--mantine-color-dimmed)"
+                          />
                           <Text size="sm">{challenge._count.candidates}</Text>
                         </Group>
                       </Table.Td>
                       <Table.Td>
                         <Group gap="xs">
-                          <IconClipboardList size={16} color="var(--mantine-color-dimmed)" />
+                          <IconClipboardList
+                            size={16}
+                            color="var(--mantine-color-dimmed)"
+                          />
                           <Text size="sm">{challenge._count.submissions}</Text>
                         </Group>
                       </Table.Td>

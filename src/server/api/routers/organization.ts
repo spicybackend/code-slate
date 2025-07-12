@@ -1,6 +1,5 @@
-import bcrypt from "bcryptjs";
-import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
+import { generateSecureToken, hashPassword } from "~/lib/crypto";
 
 import {
   createTRPCRouter,
@@ -138,7 +137,7 @@ export const organizationRouter = createTRPCRouter({
       }
 
       // Create invitation
-      const token = uuidv4();
+      const token = generateSecureToken();
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
       const invitation = await ctx.db.organizationInvitation.create({
@@ -197,7 +196,7 @@ export const organizationRouter = createTRPCRouter({
       }
 
       // Hash password
-      const hashedPassword = await bcrypt.hash(input.password, 12);
+      const hashedPassword = await hashPassword(input.password);
 
       // Create user and mark invitation as accepted
       const [user] = await Promise.all([

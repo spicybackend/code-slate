@@ -2,27 +2,27 @@
 
 import {
   Alert,
+  Badge,
   Button,
   Card,
   Container,
   Group,
+  Loader,
+  Modal,
   Progress,
   Stack,
   Text,
   Textarea,
   Title,
-  Badge,
-  Modal,
-  Loader,
 } from "@mantine/core";
 import { useDisclosure, useInterval } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import {
   IconAlertCircle,
   IconClock,
-  IconSend,
   IconEye,
   IconEyeOff,
+  IconSend,
 } from "@tabler/icons-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -49,7 +49,7 @@ export default function ChallengePage() {
   const token = params.token as string;
 
   const [content, setContent] = useState("");
-  const [events, setEvents] = useState<KeystrokeEvent[]>([]);
+  const [_events, setEvents] = useState<KeystrokeEvent[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isWindowFocused, setIsWindowFocused] = useState(true);
@@ -60,7 +60,7 @@ export default function ChallengePage() {
   ] = useDisclosure(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lastSaveRef = useRef<Date>(new Date());
+  const _lastSaveRef = useRef<Date>(new Date());
   const eventsBufferRef = useRef<KeystrokeEvent[]>([]);
 
   // Fetch challenge data
@@ -116,6 +116,12 @@ export default function ChallengePage() {
     }
   }, [submission]);
 
+  // Add keystroke event
+  const addEvent = useCallback((event: KeystrokeEvent) => {
+    setEvents((prev) => [...prev, event]);
+    eventsBufferRef.current.push(event);
+  }, []);
+
   // Window focus tracking
   useEffect(() => {
     const handleFocus = () => {
@@ -143,13 +149,7 @@ export default function ChallengePage() {
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("blur", handleBlur);
     };
-  }, []);
-
-  // Add keystroke event
-  const addEvent = useCallback((event: KeystrokeEvent) => {
-    setEvents((prev) => [...prev, event]);
-    eventsBufferRef.current.push(event);
-  }, []);
+  }, [addEvent]);
 
   // Auto-save content and events
   useEffect(() => {
@@ -263,7 +263,7 @@ export default function ChallengePage() {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     try {
       await submitMutation.mutateAsync({ token });
       setIsSubmitted(true);
@@ -273,7 +273,7 @@ export default function ChallengePage() {
         message: "Your solution has been submitted successfully!",
         color: "green",
       });
-    } catch (error) {
+    } catch (_error) {
       notifications.show({
         title: "Submission Failed",
         message:
@@ -281,7 +281,7 @@ export default function ChallengePage() {
         color: "red",
       });
     }
-  };
+  }, [token, submitMutation, closeSubmitModal]);
 
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -313,7 +313,7 @@ export default function ChallengePage() {
     if (isTimeUp && !isSubmitted && submission?.status === "IN_PROGRESS") {
       handleSubmit();
     }
-  }, [isTimeUp, isSubmitted, submission?.status]);
+  }, [isTimeUp, isSubmitted, submission?.status, handleSubmit]);
 
   if (isLoading) {
     return (
@@ -399,7 +399,7 @@ export default function ChallengePage() {
 
           {timeRemaining !== null && (
             <Progress
-              value={(elapsedTime / (challenge.timeLimit! * 60)) * 100}
+              value={(elapsedTime / ((challenge.timeLimit ?? 60) * 60)) * 100}
               color={timeRemaining < 300 ? "red" : "blue"}
               mt="md"
             />

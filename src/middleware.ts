@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import { auth } from "~/server/auth";
 
 export default auth((req) => {
