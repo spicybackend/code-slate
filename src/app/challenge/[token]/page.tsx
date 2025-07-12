@@ -10,13 +10,14 @@ import {
   Loader,
   Modal,
   Progress,
+  Select,
   Stack,
   Text,
-  Textarea,
   Title,
 } from "@mantine/core";
 import { useDisclosure, useInterval } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
+import type { EventType } from "@prisma/client";
 import {
   IconAlertCircle,
   IconClock,
@@ -24,6 +25,7 @@ import {
   IconEyeOff,
   IconSend,
 } from "@tabler/icons-react";
+import CodeEditor from "@uiw/react-textarea-code-editor";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -32,7 +34,6 @@ import {
   TYPING_INDICATOR_TIMEOUT,
 } from "~/lib/constants/tracking";
 import { api } from "~/trpc/react";
-import type { EventType } from "@prisma/client";
 
 interface KeystrokeEvent {
   type: EventType;
@@ -43,11 +44,26 @@ interface KeystrokeEvent {
   windowFocus: boolean;
 }
 
+const LANGUAGE_OPTIONS = [
+  { value: "jsx", label: "JavaScript (JSX)" },
+  { value: "tsx", label: "TypeScript (TSX)" },
+  { value: "java", label: "Java" },
+  { value: "csharp", label: "C#" },
+  { value: "python", label: "Python" },
+  { value: "ruby", label: "Ruby" },
+  { value: "cpp", label: "C++" },
+  { value: "go", label: "Go" },
+  { value: "rust", label: "Rust" },
+  { value: "php", label: "PHP" },
+  { value: "swift", label: "Swift" },
+];
+
 export default function ChallengePage() {
   const params = useParams();
   const token = params.token as string;
 
   const [content, setContent] = useState("");
+  const [language, setLanguage] = useState("jsx");
   const [_events, setEvents] = useState<KeystrokeEvent[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -268,16 +284,14 @@ export default function ChallengePage() {
         contentSaveIntervalRef.current = null;
       }
     };
-  }, [content, submission?.content, token, isSubmitted]);
+  }, [content, token, isSubmitted]);
 
-  // Textarea event handlers
-  const handleTextareaChange = (
-    event: React.ChangeEvent<HTMLTextAreaElement>,
-  ) => {
+  // Code editor event handlers
+  const handleCodeChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (isSubmitted) return;
 
-    const newContent = event.target.value;
-    setContent(newContent);
+    const value = event.target.value;
+    setContent(value);
     setIsTyping(true);
 
     // Clear existing typing timeout
@@ -464,6 +478,14 @@ export default function ChallengePage() {
           <Group justify="space-between" mb="md">
             <Title order={3}>Your Solution</Title>
             <Group>
+              <Select
+                data={LANGUAGE_OPTIONS}
+                value={language}
+                onChange={(value) => setLanguage(value || "jsx")}
+                disabled={isSubmitted || isTimeUp}
+                w={180}
+                placeholder="Select language"
+              />
               {updateContentMutation.isPending && (
                 <Text size="xs" c="dimmed">
                   Saving...
@@ -481,23 +503,24 @@ export default function ChallengePage() {
             </Group>
           </Group>
 
-          <Textarea
-            ref={textareaRef}
+          <CodeEditor
             value={content}
-            onChange={handleTextareaChange}
+            language={language}
             placeholder={
               isSubmitted ? "Solution submitted" : "Write your code here..."
             }
-            minRows={20}
-            maxRows={30}
-            autosize
-            disabled={isSubmitted || isTimeUp}
-            styles={{
-              input: {
-                fontFamily: "Monaco, Menlo, monospace",
-                fontSize: "14px",
-              },
+            onChange={handleCodeChange}
+            padding={15}
+            data-color-mode="light"
+            style={{
+              fontSize: 14,
+              backgroundColor: "#f8f9fa",
+              fontFamily: "Monaco, Menlo, 'Courier New', monospace",
+              minHeight: "500px",
+              border: "1px solid #e9ecef",
+              borderRadius: "4px",
             }}
+            disabled={isSubmitted || isTimeUp}
           />
 
           {isSubmitted && (

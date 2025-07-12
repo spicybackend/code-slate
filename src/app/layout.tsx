@@ -4,6 +4,7 @@ import "@mantine/dates/styles.css";
 import "@mantine/charts/styles.css";
 import "@mantine/notifications/styles.css";
 import "@mantine/nprogress/styles.css";
+import "@uiw/react-textarea-code-editor/dist.css";
 
 import {
   ColorSchemeScript,
