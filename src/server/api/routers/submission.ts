@@ -169,22 +169,14 @@ export const submissionRouter = createTRPCRouter({
       });
     }),
 
-  // Add keystroke event
+  // Add keystroke event (now supports content snapshots)
   addKeystrokeEvent: publicProcedure
     .input(
       z.object({
         token: z.string(),
         events: z.array(
           z.object({
-            type: z.enum([
-              "FOCUS_IN",
-              "FOCUS_OUT",
-              "TYPING",
-              "COPY",
-              "PASTE",
-              "DELETE",
-              "SELECTION_CHANGE",
-            ]),
+            type: z.enum(["FOCUS_IN", "FOCUS_OUT", "CONTENT_SNAPSHOT"]),
             timestamp: z.date(),
             cursorStart: z.number().optional(),
             cursorEnd: z.number().optional(),

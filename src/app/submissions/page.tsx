@@ -37,11 +37,11 @@ import {
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { AppShellLayout } from "~/components/AppShell";
 import { api } from "~/trpc/react";
 
-export default function SubmissionsPage() {
+function Submissions() {
   const searchParams = useSearchParams();
   const challengeIdParam = searchParams.get("challengeId");
 
@@ -496,5 +496,13 @@ export default function SubmissionsPage() {
         </Stack>
       </Container>
     </AppShellLayout>
+  );
+}
+
+export default function SubmissionsPage() {
+  return (
+    <Suspense>
+      <Submissions />
+    </Suspense>
   );
 }

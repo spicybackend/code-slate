@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,6 +5,186 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id          String                   @id @default(cuid())
+  name        String
+  slug        String                   @unique
+  verified    Boolean                  @default(false)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  challenges  Challenge[]
+  invitations OrganizationInvitation[]
+  users       User[]
+
+  @@index([slug])
+}
+
+model OrganizationInvitation {
+  id             String       @id @default(cuid())
+  email          String
+  token          String       @unique
+  role           UserRole     @default(ADMIN)
+  expires        DateTime
+  accepted       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([email, organizationId])
+  @@index([token])
+}
+
+model Account {
+  id                       String  @id @default(cuid())
+  userId                   String
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String?
+  access_token             String?
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String?
+  session_state            String?
+  refresh_token_expires_in Int?
+  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id                  String        @id @default(cuid())
+  name                String?
+  email               String        @unique
+  emailVerified       DateTime?
+  image               String?
+  createdAt           DateTime      @default(now())
+  organizationId      String?
+  password            String?
+  role                UserRole      @default(ADMIN)
+  updatedAt           DateTime      @updatedAt
+  accounts            Account[]
+  createdChallenges   Challenge[]   @relation("ChallengeCreator")
+  comments            Comment[]
+  sessions            Session[]
+  reviewedSubmissions Submission[]  @relation("SubmissionReviewer")
+  organization        Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([email])
+  @@index([organizationId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Challenge {
+  id             String          @id @default(cuid())
+  title          String
+  description    String
+  instructions   String
+  timeLimit      Int?
+  status         ChallengeStatus @default(DRAFT)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organizationId String
+  creatorId      String
+  candidates     Candidate[]
+  creator        User            @relation("ChallengeCreator", fields: [creatorId], references: [id])
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  submissions    Submission[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Candidate {
+  id          String       @id @default(cuid())
+  name        String
+  email       String
+  phone       String?
+  position    String?
+  token       String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  challengeId String
+  challenge   Challenge    @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+
+  @@unique([email, challengeId])
+  @@index([token])
+  @@index([challengeId])
+}
+
+model Submission {
+  id             String           @id @default(cuid())
+  content        String
+  status         SubmissionStatus @default(NOT_STARTED)
+  startedAt      DateTime?
+  submittedAt    DateTime?
+  reviewedAt     DateTime?
+  totalTimeSpent Int?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  challengeId    String
+  candidateId    String
+  reviewerId     String?
+  comments       Comment[]
+  events         KeystrokeEvent[]
+  candidate      Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  challenge      Challenge        @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  reviewer       User?            @relation("SubmissionReviewer", fields: [reviewerId], references: [id])
+
+  @@unique([challengeId, candidateId])
+  @@index([status])
+  @@index([challengeId])
+  @@index([candidateId])
+  @@index([reviewerId])
+}
+
+model KeystrokeEvent {
+  id           String     @id @default(cuid())
+  type         EventType
+  timestamp    DateTime
+  cursorStart  Int?
+  cursorEnd    Int?
+  content      String?
+  windowFocus  Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, timestamp])
+}
+
+model Comment {
+  id           String     @id @default(cuid())
+  content      String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  submissionId String
+  authorId     String
+  author       User       @relation(fields: [authorId], references: [id])
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@index([createdAt])
 }
 
 enum UserRole {
@@ -35,222 +212,5 @@ enum SubmissionStatus {
 enum EventType {
   FOCUS_IN
   FOCUS_OUT
-  TYPING
-  COPY
-  PASTE
-  DELETE
-  SELECTION_CHANGE
-}
-
-// Organization model
-model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  verified  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  users       User[]
-  challenges  Challenge[]
-  invitations OrganizationInvitation[]
-
-  @@index([slug])
-}
-
-// Organization invitation model for email verification
-model OrganizationInvitation {
-  id        String   @id @default(cuid())
-  email     String
-  token     String   @unique
-  role      UserRole @default(ADMIN)
-  expires   DateTime
-  accepted  Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  organizationId String
-
-  @@unique([email, organizationId])
-  @@index([token])
-}
-
-// Necessary for Next auth
-model Account {
-  id                       String  @id @default(cuid())
-  userId                   String
-  type                     String
-  provider                 String
-  providerAccountId        String
-  refresh_token            String?
-  access_token             String?
-  expires_at               Int?
-  token_type               String?
-  scope                    String?
-  id_token                 String?
-  session_state            String?
-  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refresh_token_expires_in Int?
-
-  @@unique([provider, providerAccountId])
-}
-
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  password      String? // For credentials auth
-  role          UserRole  @default(ADMIN)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  // Organization relationship
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
-
-  // Relations
-  accounts            Account[]
-  sessions            Session[]
-  createdChallenges   Challenge[]  @relation("ChallengeCreator")
-  reviewedSubmissions Submission[] @relation("SubmissionReviewer")
-  comments            Comment[]
-
-  @@index([email])
-  @@index([organizationId])
-}
-
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
-}
-
-// Challenge model
-model Challenge {
-  id           String          @id @default(cuid())
-  title        String
-  description  String          @db.Text
-  instructions String          @db.Text
-  timeLimit    Int? // Time limit in minutes
-  status       ChallengeStatus @default(DRAFT)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-
-  // Organization and creator
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  organizationId String
-  creator        User         @relation("ChallengeCreator", fields: [creatorId], references: [id])
-  creatorId      String
-
-  // Relations
-  candidates  Candidate[]
-  submissions Submission[]
-
-  @@index([organizationId])
-  @@index([status])
-  @@index([createdAt])
-}
-
-// Candidate model (for people taking challenges)
-model Candidate {
-  id        String   @id @default(cuid())
-  name      String
-  email     String
-  phone     String?
-  position  String? // Position they're applying for
-  token     String   @unique // Unique token for accessing challenge
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Challenge relationship
-  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
-  challengeId String
-
-  // Relations
-  submissions Submission[]
-
-  @@unique([email, challengeId])
-  @@index([token])
-  @@index([challengeId])
-}
-
-// Submission model
-model Submission {
-  id             String           @id @default(cuid())
-  content        String           @db.Text // The candidate's solution
-  status         SubmissionStatus @default(NOT_STARTED)
-  startedAt      DateTime?
-  submittedAt    DateTime?
-  reviewedAt     DateTime?
-  totalTimeSpent Int? // Total time in seconds
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-
-  // Challenge and candidate
-  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
-  challengeId String
-  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  candidateId String
-
-  // Reviewer
-  reviewer   User?   @relation("SubmissionReviewer", fields: [reviewerId], references: [id])
-  reviewerId String?
-
-  // Relations
-  events   KeystrokeEvent[]
-  comments Comment[]
-
-  @@unique([challengeId, candidateId])
-  @@index([status])
-  @@index([challengeId])
-  @@index([candidateId])
-  @@index([reviewerId])
-}
-
-// Keystroke tracking for replay functionality
-model KeystrokeEvent {
-  id          String    @id @default(cuid())
-  type        EventType
-  timestamp   DateTime
-  cursorStart Int? // Cursor start position
-  cursorEnd   Int? // Cursor end position
-  content     String? // Content being typed, copied, or pasted
-  windowFocus Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-
-  // Submission relationship
-  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  submissionId String
-
-  @@index([submissionId, timestamp])
-}
-
-// Comments for submission reviews
-model Comment {
-  id        String   @id @default(cuid())
-  content   String   @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Submission and author
-  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  submissionId String
-  author       User       @relation(fields: [authorId], references: [id])
-  authorId     String
-
-  @@index([submissionId])
-  @@index([createdAt])
+  CONTENT_SNAPSHOT
 }

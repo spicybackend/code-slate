@@ -28,9 +28,7 @@ import {
   IconAlertCircle,
   IconArrowLeft,
   IconCheck,
-  IconClipboard,
   IconClock,
-  IconCopy,
   IconDownload,
   IconEye,
   IconEyeOff,
@@ -39,7 +37,6 @@ import {
   IconPlayerPlay,
   IconPlayerSkipBack,
   IconPlayerSkipForward,
-  IconScissors,
   IconSend,
   IconSettings,
   IconX,
@@ -53,7 +50,6 @@ import { api } from "~/trpc/react";
 interface PlaybackSettings {
   speed: number;
   showCursor: boolean;
-  showTyping: boolean;
   showFocusChanges: boolean;
 }
 
@@ -67,16 +63,16 @@ export default function SubmissionDetailPage() {
 
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentEventIndex, setCurrentEventIndex] = useState(0);
+  const [playbackTime, setPlaybackTime] = useState(0);
   const [playbackContent, setPlaybackContent] = useState("");
-  const [cursorPosition, setCursorPosition] = useState(0);
+  const [_cursorPosition, setCursorPosition] = useState(0);
   const [playbackSettings, setPlaybackSettings] = useState<PlaybackSettings>({
     speed: 1,
     showCursor: true,
-    showTyping: true,
     showFocusChanges: true,
   });
   const [isWindowFocused, setIsWindowFocused] = useState(true);
+  const [playbackStartTime, setPlaybackStartTime] = useState<Date | null>(null);
 
   // UI state
   const [activeTab, setActiveTab] = useState<string | null>("review");
@@ -143,92 +139,82 @@ export default function SubmissionDetailPage() {
   });
 
   const events = submission?.events || [];
-  const totalEvents = events.length;
+  const contentSnapshots = events.filter((e) => e.type === "CONTENT_SNAPSHOT");
+  const focusEvents = events.filter(
+    (e) => e.type === "FOCUS_IN" || e.type === "FOCUS_OUT",
+  );
+
+  // Calculate total duration based on first and last events
+  const totalDuration =
+    events.length > 0
+      ? new Date(events[events.length - 1]?.timestamp || 0).getTime() -
+        new Date(events[0]?.timestamp || 0).getTime()
+      : 0;
 
   // Playback functions
   const resetPlayback = useCallback(() => {
-    setCurrentEventIndex(0);
+    setPlaybackTime(0);
     setPlaybackContent("");
     setCursorPosition(0);
     setIsWindowFocused(true);
+    setPlaybackStartTime(
+      events.length > 0 ? new Date(events[0]?.timestamp || 0) : null,
+    );
     if (playbackTextareaRef.current) {
       playbackTextareaRef.current.value = "";
     }
-  }, []);
+  }, [events]);
 
-  const applyEvent = useCallback(
-    (event: any, content: string) => {
-      let newContent = content;
-      let newCursorPos = cursorPosition;
+  const updatePlaybackAtTime = useCallback(
+    (targetTime: number) => {
+      if (!playbackStartTime) return;
 
-      switch (event.type) {
-        case "TYPING":
-          if (event.cursorStart !== undefined && event.content) {
-            newContent =
-              content.slice(0, event.cursorStart) +
-              event.content +
-              content.slice(event.cursorStart);
-            newCursorPos = event.cursorStart + event.content.length;
+      const targetTimestamp = new Date(
+        playbackStartTime.getTime() + targetTime,
+      );
+
+      // Find the most recent content snapshot before or at target time
+      const relevantSnapshot = [...contentSnapshots]
+        .reverse()
+        .find((event) => new Date(event.timestamp) <= targetTimestamp);
+
+      // Update content and cursor
+      if (relevantSnapshot) {
+        const newContent = relevantSnapshot.content || "";
+        const newCursorPos = relevantSnapshot.cursorStart || 0;
+
+        setPlaybackContent(newContent);
+        setCursorPosition(newCursorPos);
+
+        if (playbackTextareaRef.current) {
+          playbackTextareaRef.current.value = newContent;
+          if (playbackSettings.showCursor) {
+            playbackTextareaRef.current.setSelectionRange(
+              newCursorPos,
+              newCursorPos,
+            );
           }
-          break;
-        case "DELETE":
-          if (
-            event.cursorStart !== undefined &&
-            event.cursorEnd !== undefined
-          ) {
-            newContent =
-              content.slice(0, event.cursorStart) +
-              content.slice(event.cursorEnd);
-            newCursorPos = event.cursorStart;
-          }
-          break;
-        case "PASTE":
-          if (event.cursorStart !== undefined && event.content) {
-            newContent =
-              content.slice(0, event.cursorStart) +
-              event.content +
-              content.slice(event.cursorStart);
-            newCursorPos = event.cursorStart + event.content.length;
-          }
-          break;
-        case "FOCUS_IN":
-          setIsWindowFocused(true);
-          break;
-        case "FOCUS_OUT":
-          setIsWindowFocused(false);
-          break;
+        }
       }
 
-      return { content: newContent, cursorPosition: newCursorPos };
+      // Update focus state based on most recent focus event
+      if (playbackSettings.showFocusChanges) {
+        const relevantFocusEvent = [...focusEvents]
+          .reverse()
+          .find((event) => new Date(event.timestamp) <= targetTimestamp);
+
+        if (relevantFocusEvent) {
+          setIsWindowFocused(relevantFocusEvent.type === "FOCUS_IN");
+        }
+      }
     },
-    [cursorPosition],
+    [playbackStartTime, contentSnapshots, focusEvents, playbackSettings],
   );
 
-  const playNextEvent = useCallback(() => {
-    if (currentEventIndex >= totalEvents) {
-      setIsPlaying(false);
-      return;
-    }
-
-    const event = events[currentEventIndex];
-    if (!event) return;
-
-    const result = applyEvent(event, playbackContent);
-    setPlaybackContent(result.content);
-    setCursorPosition(result.cursorPosition);
-
-    if (playbackTextareaRef.current) {
-      playbackTextareaRef.current.value = result.content;
-      playbackTextareaRef.current.setSelectionRange(
-        result.cursorPosition,
-        result.cursorPosition,
-      );
-    }
-
-    setCurrentEventIndex(currentEventIndex + 1);
-  }, [currentEventIndex, totalEvents, events, applyEvent, playbackContent]);
-
   const startPlayback = () => {
+    if (!playbackStartTime && events.length > 0) {
+      setPlaybackStartTime(events[0]?.timestamp ?? null);
+    }
     setIsPlaying(true);
   };
 
@@ -236,29 +222,9 @@ export default function SubmissionDetailPage() {
     setIsPlaying(false);
   };
 
-  const skipToEvent = (eventIndex: number) => {
-    resetPlayback();
-
-    let content = "";
-    let cursorPos = 0;
-
-    for (let i = 0; i < Math.min(eventIndex, totalEvents); i++) {
-      const event = events[i];
-      if (event) {
-        const result = applyEvent(event, content);
-        content = result.content;
-        cursorPos = result.cursorPosition;
-      }
-    }
-
-    setPlaybackContent(content);
-    setCursorPosition(cursorPos);
-    setCurrentEventIndex(eventIndex);
-
-    if (playbackTextareaRef.current) {
-      playbackTextareaRef.current.value = content;
-      playbackTextareaRef.current.setSelectionRange(cursorPos, cursorPos);
-    }
+  const skipToTime = (timeMs: number) => {
+    setPlaybackTime(timeMs);
+    updatePlaybackAtTime(timeMs);
   };
 
   const handleAddComment = (values: CommentFormData) => {
@@ -272,13 +238,22 @@ export default function SubmissionDetailPage() {
     updateStatusMutation.mutate({ submissionId, status });
   };
 
-  // Playback interval
+  // Real-time playback interval
   useEffect(() => {
-    if (isPlaying) {
-      const baseDelay = 100; // Base delay in ms
-      const delay = baseDelay / playbackSettings.speed;
+    if (isPlaying && totalDuration > 0) {
+      const interval = 50; // Update every 50ms for smooth playback
+      const step = interval * playbackSettings.speed;
 
-      playbackIntervalRef.current = setInterval(playNextEvent, delay);
+      playbackIntervalRef.current = setInterval(() => {
+        setPlaybackTime((currentTime) => {
+          const nextTime = currentTime + step;
+          if (nextTime >= totalDuration) {
+            setIsPlaying(false);
+            return totalDuration;
+          }
+          return nextTime;
+        });
+      }, interval);
     } else if (playbackIntervalRef.current) {
       clearInterval(playbackIntervalRef.current);
       playbackIntervalRef.current = null;
@@ -289,7 +264,12 @@ export default function SubmissionDetailPage() {
         clearInterval(playbackIntervalRef.current);
       }
     };
-  }, [isPlaying, playNextEvent, playbackSettings.speed]);
+  }, [isPlaying, totalDuration, playbackSettings.speed]);
+
+  // Update playback content when time changes
+  useEffect(() => {
+    updatePlaybackAtTime(playbackTime);
+  }, [playbackTime, updatePlaybackAtTime]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -323,14 +303,8 @@ export default function SubmissionDetailPage() {
 
   const getEventIcon = (type: string) => {
     switch (type) {
-      case "TYPING":
+      case "CONTENT_SNAPSHOT":
         return IconFileText;
-      case "COPY":
-        return IconCopy;
-      case "PASTE":
-        return IconClipboard;
-      case "DELETE":
-        return IconScissors;
       case "FOCUS_IN":
         return IconEye;
       case "FOCUS_OUT":
@@ -342,14 +316,8 @@ export default function SubmissionDetailPage() {
 
   const getEventColor = (type: string) => {
     switch (type) {
-      case "TYPING":
+      case "CONTENT_SNAPSHOT":
         return "blue";
-      case "COPY":
-        return "orange";
-      case "PASTE":
-        return "yellow";
-      case "DELETE":
-        return "red";
       case "FOCUS_IN":
         return "green";
       case "FOCUS_OUT":
@@ -357,6 +325,16 @@ export default function SubmissionDetailPage() {
       default:
         return "blue";
     }
+  };
+
+  const formatDuration = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (minutes > 0) {
+      return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+    }
+    return `${remainingSeconds}s`;
   };
 
   if (isLoading) {
@@ -553,7 +531,7 @@ export default function SubmissionDetailPage() {
                       variant="filled"
                       size="lg"
                       onClick={isPlaying ? pausePlayback : startPlayback}
-                      disabled={currentEventIndex >= totalEvents}
+                      disabled={totalDuration === 0}
                     >
                       {isPlaying ? (
                         <IconPlayerPause size={20} />
@@ -562,18 +540,15 @@ export default function SubmissionDetailPage() {
                       )}
                     </ActionIcon>
 
-                    <ActionIcon
-                      variant="outline"
-                      onClick={() => skipToEvent(0)}
-                    >
+                    <ActionIcon variant="outline" onClick={() => skipToTime(0)}>
                       <IconPlayerSkipBack size={16} />
                     </ActionIcon>
 
                     <ActionIcon
                       variant="outline"
                       onClick={() =>
-                        skipToEvent(
-                          Math.min(currentEventIndex + 10, totalEvents),
+                        skipToTime(
+                          Math.min(playbackTime + 30000, totalDuration),
                         )
                       }
                     >
@@ -586,36 +561,40 @@ export default function SubmissionDetailPage() {
                   </Group>
 
                   <Group mb="md">
-                    <Text size="sm">Progress:</Text>
+                    <Text size="sm">Time:</Text>
                     <Text size="sm" fw={500}>
-                      {currentEventIndex} / {totalEvents} events
+                      {formatDuration(playbackTime)} /{" "}
+                      {formatDuration(totalDuration)}
                     </Text>
-                    <Badge
-                      color={isWindowFocused ? "green" : "red"}
-                      variant="light"
-                      leftSection={
-                        isWindowFocused ? (
-                          <IconEye size={12} />
-                        ) : (
-                          <IconEyeOff size={12} />
-                        )
-                      }
-                    >
-                      {isWindowFocused ? "Focused" : "Focus Lost"}
-                    </Badge>
+                    <Text size="sm">Speed: {playbackSettings.speed}x</Text>
+                    {playbackSettings.showFocusChanges && (
+                      <Badge
+                        color={isWindowFocused ? "green" : "red"}
+                        variant="light"
+                        leftSection={
+                          isWindowFocused ? (
+                            <IconEye size={12} />
+                          ) : (
+                            <IconEyeOff size={12} />
+                          )
+                        }
+                      >
+                        {isWindowFocused ? "Focused" : "Not Focused"}
+                      </Badge>
+                    )}
                   </Group>
 
                   <Slider
-                    value={currentEventIndex}
-                    onChange={skipToEvent}
-                    max={totalEvents}
+                    value={playbackTime}
+                    onChange={skipToTime}
+                    max={totalDuration}
                     min={0}
-                    step={1}
+                    step={1000}
                     marks={[
                       { value: 0, label: "Start" },
-                      { value: Math.floor(totalEvents / 2), label: "Middle" },
-                      { value: totalEvents, label: "End" },
+                      { value: totalDuration, label: "End" },
                     ]}
+                    mb="md"
                   />
                 </Card>
 
@@ -664,42 +643,92 @@ export default function SubmissionDetailPage() {
                     No events recorded for this submission.
                   </Text>
                 ) : (
-                  <Timeline active={-1} bulletSize={24} lineWidth={2}>
-                    {events.map((event, index) => {
-                      const EventIcon = getEventIcon(event.type);
-                      return (
-                        <Timeline.Item
-                          key={`${event.type}-${event.timestamp}-${index}`}
-                          bullet={<EventIcon size={12} />}
-                          color={getEventColor(event.type)}
-                          title={
-                            <Group gap="xs">
-                              <Text size="sm" fw={500}>
-                                {event.type.replace("_", " ").toLowerCase()}
+                  <Stack gap="lg">
+                    {/* Summary Stats */}
+                    <Group>
+                      <Text size="sm">
+                        <strong>{contentSnapshots.length}</strong> content
+                        snapshots
+                      </Text>
+                      <Text size="sm">
+                        <strong>{focusEvents.length}</strong> focus changes
+                      </Text>
+                      <Text size="sm">
+                        <strong>{formatDuration(totalDuration)}</strong> total
+                        duration
+                      </Text>
+                    </Group>
+
+                    <Timeline active={-1} bulletSize={24} lineWidth={2}>
+                      {events.map((event, index) => {
+                        const EventIcon = getEventIcon(event.type);
+                        const eventTime = playbackStartTime
+                          ? new Date(event.timestamp).getTime() -
+                            playbackStartTime.getTime()
+                          : 0;
+
+                        return (
+                          <Timeline.Item
+                            key={`${event.type}-${event.timestamp}-${index}`}
+                            bullet={<EventIcon size={12} />}
+                            color={getEventColor(event.type)}
+                            title={
+                              <Group gap="xs">
+                                <Text size="sm" fw={500}>
+                                  {event.type === "CONTENT_SNAPSHOT"
+                                    ? "Content Update"
+                                    : event.type
+                                        .replace("_", " ")
+                                        .toLowerCase()}
+                                </Text>
+                                <Text size="xs" c="dimmed">
+                                  +{formatDuration(eventTime)}
+                                </Text>
+                                <Text size="xs" c="dimmed">
+                                  ({formatTime(event.timestamp.toString())})
+                                </Text>
+                              </Group>
+                            }
+                          >
+                            {event.type === "CONTENT_SNAPSHOT" &&
+                              event.content && (
+                                <Stack gap="xs" mt="xs">
+                                  <Text size="xs" c="dimmed">
+                                    Content length: {event.content.length}{" "}
+                                    characters
+                                  </Text>
+                                  {event.content.length > 100 ? (
+                                    <Code block>
+                                      {event.content.substring(0, 100)}...
+                                    </Code>
+                                  ) : (
+                                    <Code block>
+                                      {event.content || "(empty)"}
+                                    </Code>
+                                  )}
+                                </Stack>
+                              )}
+                            {event.cursorStart && (
+                              <Text size="xs" c="dimmed" mt="xs">
+                                Cursor position: {event.cursorStart}
+                                {event.cursorEnd &&
+                                  event.cursorEnd !== event.cursorStart &&
+                                  ` (selection: ${event.cursorEnd - event.cursorStart} chars)`}
                               </Text>
-                              <Text size="xs" c="dimmed">
-                                {formatTime(event.timestamp.toString())}
+                            )}
+                            {(event.type === "FOCUS_OUT" ||
+                              event.type === "FOCUS_IN") && (
+                              <Text size="xs" c="dimmed" mt="xs">
+                                Window{" "}
+                                {event.type === "FOCUS_IN" ? "gained" : "lost"}{" "}
+                                focus
                               </Text>
-                            </Group>
-                          }
-                        >
-                          {event.content && (
-                            <Code block mt="xs">
-                              {event.content}
-                            </Code>
-                          )}
-                          {event.cursorStart !== undefined && (
-                            <Text size="xs" c="dimmed" mt="xs">
-                              Cursor: {event.cursorStart}
-                              {event.cursorEnd !== undefined &&
-                                event.cursorEnd !== event.cursorStart &&
-                                ` - ${event.cursorEnd}`}
-                            </Text>
-                          )}
-                        </Timeline.Item>
-                      );
-                    })}
-                  </Timeline>
+                            )}
+                          </Timeline.Item>
+                        );
+                      })}
+                    </Timeline>
+                  </Stack>
                 )}
               </Card>
             </Tabs.Panel>

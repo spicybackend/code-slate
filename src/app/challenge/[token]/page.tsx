@@ -26,17 +26,16 @@ import {
 } from "@tabler/icons-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AUTO_SAVE_INTERVAL,
+  CONTENT_SNAPSHOT_INTERVAL,
+  TYPING_INDICATOR_TIMEOUT,
+} from "~/lib/constants/tracking";
 import { api } from "~/trpc/react";
+import type { EventType } from "@prisma/client";
 
 interface KeystrokeEvent {
-  type:
-    | "FOCUS_IN"
-    | "FOCUS_OUT"
-    | "TYPING"
-    | "COPY"
-    | "PASTE"
-    | "DELETE"
-    | "SELECTION_CHANGE";
+  type: EventType;
   timestamp: Date;
   cursorStart?: number;
   cursorEnd?: number;
@@ -54,6 +53,7 @@ export default function ChallengePage() {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isWindowFocused, setIsWindowFocused] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
+  const [lastContentSnapshot, setLastContentSnapshot] = useState("");
   const [
     submitModalOpened,
     { open: openSubmitModal, close: closeSubmitModal },
@@ -62,6 +62,8 @@ export default function ChallengePage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const _lastSaveRef = useRef<Date>(new Date());
   const eventsBufferRef = useRef<KeystrokeEvent[]>([]);
+  const lastSnapshotTimeRef = useRef<number>(0);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch challenge data
   const {
@@ -105,6 +107,7 @@ export default function ChallengePage() {
   useEffect(() => {
     if (submission?.content) {
       setContent(submission.content);
+      setLastContentSnapshot(submission.content);
     }
     if (submission?.status === "SUBMITTED") {
       setIsSubmitted(true);
@@ -122,6 +125,26 @@ export default function ChallengePage() {
     eventsBufferRef.current.push(event);
   }, []);
 
+  // Add content snapshot (throttled)
+  const addContentSnapshot = useCallback(() => {
+    const now = Date.now();
+    const timeSinceLastSnapshot = now - lastSnapshotTimeRef.current;
+
+    if (timeSinceLastSnapshot >= CONTENT_SNAPSHOT_INTERVAL) {
+      const cursorPos = textareaRef.current?.selectionStart || 0;
+      addEvent({
+        type: "CONTENT_SNAPSHOT",
+        timestamp: new Date(),
+        cursorStart: cursorPos,
+        cursorEnd: cursorPos,
+        content: content,
+        windowFocus: isWindowFocused,
+      });
+      setLastContentSnapshot(content);
+      lastSnapshotTimeRef.current = now;
+    }
+  }, [content, isWindowFocused, addEvent]);
+
   // Window focus tracking
   useEffect(() => {
     const handleFocus = () => {
@@ -129,6 +152,8 @@ export default function ChallengePage() {
       addEvent({
         type: "FOCUS_IN",
         timestamp: new Date(),
+        cursorStart: textareaRef.current?.selectionStart || 0,
+        cursorEnd: textareaRef.current?.selectionEnd || 0,
         windowFocus: true,
       });
     };
@@ -138,6 +163,8 @@ export default function ChallengePage() {
       addEvent({
         type: "FOCUS_OUT",
         timestamp: new Date(),
+        cursorStart: textareaRef.current?.selectionStart || 0,
+        cursorEnd: textareaRef.current?.selectionEnd || 0,
         windowFocus: false,
       });
     };
@@ -151,15 +178,38 @@ export default function ChallengePage() {
     };
   }, [addEvent]);
 
+  // Content change effect for snapshots
+  useEffect(() => {
+    if (content !== lastContentSnapshot && !isSubmitted) {
+      addContentSnapshot();
+    }
+  }, [content, lastContentSnapshot, isSubmitted, addContentSnapshot]);
+
   // Auto-save content and events
   useEffect(() => {
     const saveInterval = setInterval(() => {
       if (eventsBufferRef.current.length > 0 && !isSubmitted) {
         // Send events to server
-        addKeystrokeEventMutation.mutate({
-          token,
-          events: eventsBufferRef.current,
-        });
+        const eventsToSave = [...eventsBufferRef.current];
+        eventsBufferRef.current = [];
+
+        addKeystrokeEventMutation.mutate(
+          {
+            token,
+            events: eventsToSave,
+          },
+          {
+            onError: (error) => {
+              console.error("Failed to save keystroke events:", error);
+              notifications.show({
+                title: "Warning",
+                message:
+                  "Failed to save keystroke events. Your typing activity may not be recorded.",
+                color: "orange",
+              });
+            },
+          },
+        );
         eventsBufferRef.current = [];
       }
 
@@ -170,7 +220,7 @@ export default function ChallengePage() {
           content,
         });
       }
-    }, 5000); // Save every 5 seconds
+    }, AUTO_SAVE_INTERVAL); // Save based on configured interval
 
     return () => clearInterval(saveInterval);
   }, [
@@ -189,78 +239,33 @@ export default function ChallengePage() {
     if (isSubmitted) return;
 
     const newContent = event.target.value;
-    const cursorPosition = event.target.selectionStart;
-
     setContent(newContent);
     setIsTyping(true);
 
-    // Determine if content was added or removed
-    const lengthDiff = newContent.length - content.length;
+    // Clear existing typing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
 
-    addEvent({
-      type: lengthDiff > 0 ? "TYPING" : "DELETE",
-      timestamp: new Date(),
-      cursorStart: cursorPosition - Math.abs(lengthDiff),
-      cursorEnd: cursorPosition,
-      content:
-        lengthDiff > 0
-          ? newContent.slice(cursorPosition - lengthDiff, cursorPosition)
-          : "",
-      windowFocus: isWindowFocused,
-    });
-
-    // Clear typing indicator after 2 seconds
-    setTimeout(() => setIsTyping(false), 2000);
+    // Set new typing timeout
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false);
+    }, TYPING_INDICATOR_TIMEOUT);
   };
 
   const handleCopy = () => {
-    if (textareaRef.current) {
-      const start = textareaRef.current.selectionStart;
-      const end = textareaRef.current.selectionEnd;
-      const selectedText = content.slice(start, end);
-
-      addEvent({
-        type: "COPY",
-        timestamp: new Date(),
-        cursorStart: start,
-        cursorEnd: end,
-        content: selectedText,
-        windowFocus: isWindowFocused,
-      });
-    }
+    // Copy events are now tracked as part of content snapshots
+    // No need for individual copy tracking
   };
 
-  const handlePaste = (event: React.ClipboardEvent) => {
+  const handlePaste = (_event: React.ClipboardEvent) => {
     if (isSubmitted) return;
-
-    const pastedText = event.clipboardData.getData("text");
-    const cursorPosition = textareaRef.current?.selectionStart || 0;
-
-    addEvent({
-      type: "PASTE",
-      timestamp: new Date(),
-      cursorStart: cursorPosition,
-      cursorEnd: cursorPosition,
-      content: pastedText,
-      windowFocus: isWindowFocused,
-    });
+    // Paste events will be captured in the next content snapshot
   };
 
   const handleSelectionChange = () => {
-    if (textareaRef.current && !isSubmitted) {
-      const start = textareaRef.current.selectionStart;
-      const end = textareaRef.current.selectionEnd;
-
-      if (start !== end) {
-        addEvent({
-          type: "SELECTION_CHANGE",
-          timestamp: new Date(),
-          cursorStart: start,
-          cursorEnd: end,
-          windowFocus: isWindowFocused,
-        });
-      }
-    }
+    // Selection changes are now tracked as part of content snapshots
+    // No need for individual selection tracking
   };
 
   const handleSubmit = useCallback(async () => {
@@ -314,6 +319,15 @@ export default function ChallengePage() {
       handleSubmit();
     }
   }, [isTimeUp, isSubmitted, submission?.status, handleSubmit]);
+
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (isLoading) {
     return (
