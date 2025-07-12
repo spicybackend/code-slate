@@ -64,6 +64,9 @@ export default function ChallengePage() {
   const eventsBufferRef = useRef<KeystrokeEvent[]>([]);
   const lastSnapshotTimeRef = useRef<number>(0);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const eventsSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const contentSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedContentRef = useRef<string>("");
 
   // Fetch challenge data
   const {
@@ -83,6 +86,19 @@ export default function ChallengePage() {
   const addKeystrokeEventMutation =
     api.submission.addKeystrokeEvent.useMutation();
   const submitMutation = api.submission.submit.useMutation();
+
+  // Mutation refs for stable access in intervals
+  const addKeystrokeEventMutationRef = useRef(addKeystrokeEventMutation);
+  const updateContentMutationRef = useRef(updateContentMutation);
+
+  // Keep mutation refs updated
+  useEffect(() => {
+    addKeystrokeEventMutationRef.current = addKeystrokeEventMutation;
+  }, [addKeystrokeEventMutation]);
+
+  useEffect(() => {
+    updateContentMutationRef.current = updateContentMutation;
+  }, [updateContentMutation]);
 
   const challenge = challengeData?.challenge;
   const submission = challengeData;
@@ -108,6 +124,7 @@ export default function ChallengePage() {
     if (submission?.content) {
       setContent(submission.content);
       setLastContentSnapshot(submission.content);
+      lastSavedContentRef.current = submission.content;
     }
     if (submission?.status === "SUBMITTED") {
       setIsSubmitted(true);
@@ -185,52 +202,73 @@ export default function ChallengePage() {
     }
   }, [content, lastContentSnapshot, isSubmitted, addContentSnapshot]);
 
-  // Auto-save content and events
+  // Auto-save events (throttled)
   useEffect(() => {
-    const saveInterval = setInterval(() => {
-      if (eventsBufferRef.current.length > 0 && !isSubmitted) {
-        // Send events to server
-        const eventsToSave = [...eventsBufferRef.current];
-        eventsBufferRef.current = [];
+    if (!isSubmitted) {
+      eventsSaveIntervalRef.current = setInterval(() => {
+        if (eventsBufferRef.current.length > 0) {
+          // Send events to server
+          const eventsToSave = [...eventsBufferRef.current];
+          eventsBufferRef.current = [];
 
-        addKeystrokeEventMutation.mutate(
-          {
-            token,
-            events: eventsToSave,
-          },
-          {
-            onError: (error) => {
-              console.error("Failed to save keystroke events:", error);
-              notifications.show({
-                title: "Warning",
-                message:
-                  "Failed to save keystroke events. Your typing activity may not be recorded.",
-                color: "orange",
-              });
+          addKeystrokeEventMutationRef.current.mutate(
+            {
+              token,
+              events: eventsToSave,
             },
-          },
-        );
-        eventsBufferRef.current = [];
-      }
+            {
+              onError: (error) => {
+                console.error("Failed to save keystroke events:", error);
+                notifications.show({
+                  title: "Warning",
+                  message:
+                    "Failed to save keystroke events. Your typing activity may not be recorded.",
+                  color: "orange",
+                });
+                // Put events back in buffer on error to retry later
+                eventsBufferRef.current.unshift(...eventsToSave);
+              },
+            },
+          );
+        }
+      }, AUTO_SAVE_INTERVAL);
+    }
 
-      // Save content if changed
-      if (content !== submission?.content && !isSubmitted) {
-        updateContentMutation.mutate({
-          token,
-          content,
-        });
+    return () => {
+      if (eventsSaveIntervalRef.current) {
+        clearInterval(eventsSaveIntervalRef.current);
+        eventsSaveIntervalRef.current = null;
       }
-    }, AUTO_SAVE_INTERVAL); // Save based on configured interval
+    };
+  }, [token, isSubmitted]);
 
-    return () => clearInterval(saveInterval);
-  }, [
-    content,
-    submission?.content,
-    token,
-    isSubmitted,
-    addKeystrokeEventMutation,
-    updateContentMutation,
-  ]);
+  // Auto-save content (throttled)
+  useEffect(() => {
+    if (!isSubmitted) {
+      contentSaveIntervalRef.current = setInterval(() => {
+        if (content !== lastSavedContentRef.current) {
+          updateContentMutationRef.current.mutate(
+            {
+              token,
+              content,
+            },
+            {
+              onSuccess: () => {
+                lastSavedContentRef.current = content;
+              },
+            },
+          );
+        }
+      }, AUTO_SAVE_INTERVAL);
+    }
+
+    return () => {
+      if (contentSaveIntervalRef.current) {
+        clearInterval(contentSaveIntervalRef.current);
+        contentSaveIntervalRef.current = null;
+      }
+    };
+  }, [content, submission?.content, token, isSubmitted]);
 
   // Textarea event handlers
   const handleTextareaChange = (
@@ -310,6 +348,12 @@ export default function ChallengePage() {
     return () => {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
+      }
+      if (eventsSaveIntervalRef.current) {
+        clearInterval(eventsSaveIntervalRef.current);
+      }
+      if (contentSaveIntervalRef.current) {
+        clearInterval(contentSaveIntervalRef.current);
       }
     };
   }, []);
@@ -441,9 +485,6 @@ export default function ChallengePage() {
             ref={textareaRef}
             value={content}
             onChange={handleTextareaChange}
-            // onCopy={handleCopy}
-            // onPaste={handlePaste}
-            // onSelect={handleSelectionChange}
             placeholder={
               isSubmitted ? "Solution submitted" : "Write your code here..."
             }
