@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { generateSecureToken, hashPassword } from "~/lib/crypto";
+import { sendOrganizationInvitation } from "~/lib/email/services";
 
 import {
   createTRPCRouter,
@@ -153,7 +154,16 @@ export const organizationRouter = createTRPCRouter({
         },
       });
 
-      // TODO: Send invitation email using Resend
+      // Send invitation email
+      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+      await sendOrganizationInvitation({
+        inviteeEmail: input.email,
+        organizationName: invitation.organization.name,
+        inviterName: ctx.session.user.name || "Code Slate Team",
+        inviteToken: token,
+        role: input.role,
+        baseUrl,
+      });
 
       return invitation;
     }),

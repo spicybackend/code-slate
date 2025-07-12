@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { generateSecureToken } from "~/lib/crypto";
+import {
+  sendChallengeInvitation,
+  sendChallengeReminder,
+} from "~/lib/email/services";
 
 import {
   createTRPCRouter,
@@ -250,6 +254,9 @@ export const challengeRouter = createTRPCRouter({
       // Verify challenge belongs to organization
       const challenge = await ctx.db.challenge.findUnique({
         where: { id: input.challengeId },
+        include: {
+          organization: true,
+        },
       });
 
       if (
@@ -297,7 +304,19 @@ export const challengeRouter = createTRPCRouter({
         },
       });
 
-      // TODO: Send challenge invitation email using Resend
+      // Send challenge invitation email
+      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+      await sendChallengeInvitation({
+        candidateName: input.name,
+        candidateEmail: input.email,
+        challengeTitle: challenge.title,
+        challengeDescription: challenge.description,
+        organizationName: challenge.organization.name,
+        position: input.position,
+        timeLimit: challenge.timeLimit ?? undefined,
+        challengeToken: token,
+        baseUrl,
+      });
 
       return { ...candidate, challengeUrl: `/challenge/${token}` };
     }),
@@ -469,5 +488,55 @@ export const challengeRouter = createTRPCRouter({
           },
         },
       });
+    }),
+
+  // Send reminder email to candidate
+  sendReminder: protectedProcedure
+    .input(z.object({ candidateId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.session.user.organizationId) {
+        throw new Error("User not associated with an organization");
+      }
+
+      // Check if user can send reminders
+      if (!["ADMIN", "HIRING_MANAGER"].includes(ctx.session.user.role)) {
+        throw new Error("Only admins and hiring managers can send reminders");
+      }
+
+      // Get candidate with challenge and organization data
+      const candidate = await ctx.db.candidate.findUnique({
+        where: { id: input.candidateId },
+        include: {
+          challenge: {
+            include: {
+              organization: true,
+            },
+          },
+        },
+      });
+
+      if (!candidate) {
+        throw new Error("Candidate not found");
+      }
+
+      // Verify challenge belongs to user's organization
+      if (
+        candidate.challenge.organizationId !== ctx.session.user.organizationId
+      ) {
+        throw new Error("Candidate not found");
+      }
+
+      // Send reminder email
+      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+      await sendChallengeReminder({
+        candidateName: candidate.name,
+        candidateEmail: candidate.email,
+        challengeTitle: candidate.challenge.title,
+        organizationName: candidate.challenge.organization.name,
+        challengeToken: candidate.token,
+        baseUrl,
+      });
+
+      return { success: true };
     }),
 });
