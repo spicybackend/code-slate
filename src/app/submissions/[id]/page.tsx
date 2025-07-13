@@ -1,62 +1,26 @@
 "use client";
 
-import {
-  ActionIcon,
-  Alert,
-  Avatar,
-  Badge,
-  Box,
-  Button,
-  Card,
-  Code,
-  Container,
-  Divider,
-  Group,
-  Modal,
-  Select,
-  Slider,
-  Stack,
-  Tabs,
-  Text,
-  Textarea,
-  Timeline,
-  Title,
-} from "@mantine/core";
-import { useForm } from "@mantine/form";
+import { Alert, Container, Stack, Tabs, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import {
-  IconAlertCircle,
-  IconArrowLeft,
-  IconCheck,
-  IconClock,
-  IconDownload,
-  IconEye,
-  IconEyeOff,
-  IconFileText,
-  IconPlayerPause,
-  IconPlayerPlay,
-  IconPlayerSkipBack,
-  IconPlayerSkipForward,
-  IconRestore,
-  IconSend,
-  IconSettings,
-  IconX,
-} from "@tabler/icons-react";
-import Link from "next/link";
+import { IconAlertCircle } from "@tabler/icons-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShellLayout } from "~/components/AppShell";
 import { api } from "~/trpc/react";
+import {
+  CodeReviewTab,
+  CommentsTab,
+  EventTimelineTab,
+  KeystrokePlaybackTab,
+  PlaybackSettingsModal,
+  SubmissionHeader,
+} from "./components";
 
 interface PlaybackSettings {
   speed: number;
   showCursor: boolean;
   showFocusChanges: boolean;
-}
-
-interface CommentFormData {
-  content: string;
 }
 
 export default function SubmissionDetailPage() {
@@ -100,7 +64,6 @@ export default function SubmissionDetailPage() {
         message: "Comment added successfully",
         color: "green",
       });
-      commentForm.reset();
       refetch();
     },
     onError: (error) => {
@@ -130,16 +93,6 @@ export default function SubmissionDetailPage() {
     },
   });
 
-  // Forms
-  const commentForm = useForm<CommentFormData>({
-    initialValues: {
-      content: "",
-    },
-    validate: {
-      content: (value) => (value.length < 1 ? "Comment is required" : null),
-    },
-  });
-
   const events = submission?.events || [];
   const contentSnapshots = events.filter((e) => e.type === "CONTENT_SNAPSHOT");
   const focusEvents = events.filter(
@@ -156,16 +109,38 @@ export default function SubmissionDetailPage() {
   // Playback functions
   const resetPlayback = useCallback(() => {
     setPlaybackTime(0);
-    setPlaybackContent("");
-    setCursorPosition(0);
-    setIsWindowFocused(true);
     setPlaybackStartTime(
       events.length > 0 ? new Date(events[0]?.timestamp || 0) : null,
     );
+
+    // Start with empty content - content will be populated by updatePlaybackAtTime(0)
+    setPlaybackContent("");
+    setCursorPosition(0);
+
+    // Initialize focus state - assume focused at start unless first event is FOCUS_OUT
+    let initialFocusState = true;
+    if (focusEvents.length > 0 && events.length > 0) {
+      const startTime = new Date(events[0]?.timestamp || 0).getTime();
+      const firstFocusEvent = focusEvents[0];
+      // If the first focus event is very early (within first second) and is FOCUS_OUT,
+      // then we started unfocused
+      if (firstFocusEvent?.type === "FOCUS_OUT") {
+        const eventTime =
+          new Date(firstFocusEvent.timestamp).getTime() - startTime;
+        if (eventTime < 1000) {
+          initialFocusState = false;
+        }
+      }
+    }
+    setIsWindowFocused(initialFocusState);
+
     if (playbackTextareaRef.current) {
       playbackTextareaRef.current.value = "";
+      if (playbackSettings.showCursor) {
+        playbackTextareaRef.current.setSelectionRange(0, 0);
+      }
     }
-  }, [events]);
+  }, [events, contentSnapshots, focusEvents, playbackSettings]);
 
   const updatePlaybackAtTime = useCallback(
     (targetTime: number) => {
@@ -181,21 +156,24 @@ export default function SubmissionDetailPage() {
         .find((event) => new Date(event.timestamp) <= targetTimestamp);
 
       // Update content and cursor
+      let newContent = "";
+      let newCursorPos = 0;
+
       if (relevantSnapshot) {
-        const newContent = relevantSnapshot.content || "";
-        const newCursorPos = relevantSnapshot.cursorStart || 0;
+        newContent = relevantSnapshot.content || "";
+        newCursorPos = relevantSnapshot.cursorStart || 0;
+      }
 
-        setPlaybackContent(newContent);
-        setCursorPosition(newCursorPos);
+      setPlaybackContent(newContent);
+      setCursorPosition(newCursorPos);
 
-        if (playbackTextareaRef.current) {
-          playbackTextareaRef.current.value = newContent;
-          if (playbackSettings.showCursor) {
-            playbackTextareaRef.current.setSelectionRange(
-              newCursorPos,
-              newCursorPos,
-            );
-          }
+      if (playbackTextareaRef.current) {
+        playbackTextareaRef.current.value = newContent;
+        if (playbackSettings.showCursor) {
+          playbackTextareaRef.current.setSelectionRange(
+            newCursorPos,
+            newCursorPos,
+          );
         }
       }
 
@@ -229,7 +207,7 @@ export default function SubmissionDetailPage() {
     updatePlaybackAtTime(timeMs);
   };
 
-  const handleAddComment = (values: CommentFormData) => {
+  const handleAddComment = (values: { content: string }) => {
     addCommentMutation.mutate({
       submissionId,
       content: values.content,
@@ -282,62 +260,26 @@ export default function SubmissionDetailPage() {
     };
   }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "SUBMITTED":
-        return "yellow";
-      case "UNDER_REVIEW":
-        return "blue";
-      case "ACCEPTED":
-        return "green";
-      case "REJECTED":
-        return "red";
-      case "IN_PROGRESS":
-        return "orange";
-      default:
-        return "gray";
+  // Initialize playback state when events data loads
+  useEffect(() => {
+    if (events.length > 0 && !playbackStartTime) {
+      resetPlayback();
     }
-  };
+  }, [events, playbackStartTime, resetPlayback]);
 
-  const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString();
-  };
-
-  const getEventIcon = (type: string) => {
-    switch (type) {
-      case "CONTENT_SNAPSHOT":
-        return IconFileText;
-      case "FOCUS_IN":
-        return IconEye;
-      case "FOCUS_OUT":
-        return IconEyeOff;
-      default:
-        return IconClock;
+  // Initialize display after resetPlayback completes
+  useEffect(() => {
+    if (playbackStartTime && events.length > 0 && playbackTime === 0) {
+      updatePlaybackAtTime(0);
     }
-  };
+  }, [playbackStartTime, events, updatePlaybackAtTime, playbackTime]);
 
-  const getEventColor = (type: string) => {
-    switch (type) {
-      case "CONTENT_SNAPSHOT":
-        return "blue";
-      case "FOCUS_IN":
-        return "green";
-      case "FOCUS_OUT":
-        return "gray";
-      default:
-        return "blue";
+  // Update playback display when playback time changes
+  useEffect(() => {
+    if (playbackStartTime && events.length > 0) {
+      updatePlaybackAtTime(playbackTime);
     }
-  };
-
-  const formatDuration = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    if (minutes > 0) {
-      return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-    }
-    return `${remainingSeconds}s`;
-  };
+  }, [playbackTime, playbackStartTime, events, updatePlaybackAtTime]);
 
   if (isLoading) {
     return (
@@ -370,112 +312,27 @@ export default function SubmissionDetailPage() {
     <AppShellLayout>
       <Container size="xl">
         <Stack gap="lg">
-          {/* Header */}
-          <Group justify="space-between">
-            <div>
-              <Group mb="sm">
-                <Button
-                  component={Link}
-                  href="/submissions"
-                  variant="subtle"
-                  leftSection={<IconArrowLeft size={16} />}
-                >
-                  Back to Submissions
-                </Button>
-                <Badge
-                  color={getStatusColor(submission.status)}
-                  variant="light"
-                >
-                  {submission.status.replace("_", " ").toLowerCase()}
-                </Badge>
-              </Group>
-              <Title order={1}>Submission Review</Title>
-              <Text c="dimmed">
-                {submission.candidate.name} • {submission.challenge.title}
-              </Text>
-            </div>
-
-            <Group>
-              {submission.status === "SUBMITTED" && (
-                <>
-                  <Button
-                    color="green"
-                    leftSection={<IconCheck size={16} />}
-                    onClick={() => handleStatusUpdate("ACCEPTED")}
-                    loading={updateStatusMutation.isPending}
-                  >
-                    Accept
-                  </Button>
-                  <Button
-                    color="red"
-                    variant="outline"
-                    leftSection={<IconX size={16} />}
-                    onClick={() => handleStatusUpdate("REJECTED")}
-                    loading={updateStatusMutation.isPending}
-                  >
-                    Reject
-                  </Button>
-                </>
-              )}
-              <Button
-                variant="outline"
-                leftSection={<IconDownload size={16} />}
-              >
-                Export
-              </Button>
-            </Group>
-          </Group>
-
-          {/* Candidate Info */}
-          <Card withBorder p="md">
-            <Group>
-              <Avatar size="lg" radius="xl">
-                {submission.candidate.name.charAt(0).toUpperCase()}
-              </Avatar>
-              <div style={{ flex: 1 }}>
-                <Group gap="lg">
-                  <div>
-                    <Text fw={500}>{submission.candidate.name}</Text>
-                    <Text size="sm" c="dimmed">
-                      {submission.candidate.email}
-                    </Text>
-                  </div>
-                  <div>
-                    <Text size="sm" c="dimmed">
-                      Position
-                    </Text>
-                    <Text size="sm">
-                      {submission.candidate.position || "Not specified"}
-                    </Text>
-                  </div>
-                  <div>
-                    <Text size="sm" c="dimmed">
-                      Time Spent
-                    </Text>
-                    <Text size="sm">
-                      {submission.totalTimeSpent
-                        ? `${Math.floor(submission.totalTimeSpent / 60)}:${(
-                            submission.totalTimeSpent % 60
-                          )
-                            .toString()
-                            .padStart(2, "0")}`
-                        : "—"}
-                    </Text>
-                  </div>
-                  <div>
-                    <Text size="sm" c="dimmed">
-                      Submitted
-                    </Text>
-                    <Text size="sm">
-                      {submission.submittedAt
-                        ? new Date(submission.submittedAt).toLocaleDateString()
-                        : "—"}
-                    </Text>
-                  </div>
-                </Group>
-              </div>
-            </Group>
-          </Card>
+          <SubmissionHeader
+            submission={{
+              id: submission.id,
+              status: submission.status as
+                | "SUBMITTED"
+                | "ACCEPTED"
+                | "REJECTED",
+              candidate: {
+                name: submission.candidate.name,
+                email: submission.candidate.email,
+                position: submission.candidate.position || undefined,
+              },
+              challenge: {
+                title: submission.challenge.title,
+              },
+              totalTimeSpent: submission.totalTimeSpent || undefined,
+              submittedAt: submission.submittedAt || undefined,
+            }}
+            onStatusUpdate={handleStatusUpdate}
+            isUpdatingStatus={updateStatusMutation.isPending}
+          />
 
           {/* Tabs */}
           <Tabs value={activeTab} onChange={setActiveTab}>
@@ -490,554 +347,87 @@ export default function SubmissionDetailPage() {
 
             {/* Code Review Tab */}
             <Tabs.Panel value="review" pt="lg">
-              <Card withBorder p="lg">
-                <Title order={3} mb="md">
-                  Final Submission
-                </Title>
-                <Textarea
-                  value={submission.content}
-                  readOnly
-                  autosize
-                  minRows={20}
-                  maxRows={30}
-                  styles={{
-                    input: {
-                      fontFamily: "Monaco, Menlo, monospace",
-                      fontSize: "14px",
-                      backgroundColor: "#f8f9fa",
-                    },
-                  }}
-                />
-              </Card>
+              <CodeReviewTab content={submission.content} />
             </Tabs.Panel>
 
             {/* Keystroke Playback Tab */}
             <Tabs.Panel value="playback" pt="lg">
-              <Stack gap="md">
-                {/* Playback Controls */}
-                <Card withBorder p="md">
-                  <Group justify="space-between" mb="md">
-                    <Title order={4}>Playback Controls</Title>
-                    <Button
-                      variant="subtle"
-                      size="sm"
-                      leftSection={<IconSettings size={16} />}
-                      onClick={openSettings}
-                    >
-                      Settings
-                    </Button>
-                  </Group>
-
-                  <Group mb="md">
-                    <ActionIcon
-                      variant="filled"
-                      size="lg"
-                      onClick={isPlaying ? pausePlayback : startPlayback}
-                      disabled={totalDuration === 0}
-                    >
-                      {isPlaying ? (
-                        <IconPlayerPause size={20} />
-                      ) : (
-                        <IconPlayerPlay size={20} />
-                      )}
-                    </ActionIcon>
-
-                    <ActionIcon variant="outline" onClick={() => skipToTime(0)}>
-                      <IconPlayerSkipBack size={16} />
-                    </ActionIcon>
-
-                    <ActionIcon
-                      variant="outline"
-                      onClick={() =>
-                        skipToTime(
-                          Math.min(playbackTime + 30000, totalDuration),
-                        )
-                      }
-                    >
-                      <IconPlayerSkipForward size={16} />
-                    </ActionIcon>
-
-                    <ActionIcon variant="outline" onClick={resetPlayback}>
-                      <IconRestore size={16} />
-                    </ActionIcon>
-                  </Group>
-
-                  <Group mb="md">
-                    <Text size="sm">Time:</Text>
-                    <Text size="sm" fw={500}>
-                      {formatDuration(playbackTime)} /{" "}
-                      {formatDuration(totalDuration)}
-                    </Text>
-                    <Text size="sm">Speed: {playbackSettings.speed}x</Text>
-                    {playbackSettings.showFocusChanges && (
-                      <Badge
-                        color={isWindowFocused ? "green" : "red"}
-                        variant="light"
-                        leftSection={
-                          isWindowFocused ? (
-                            <IconEye size={12} />
-                          ) : (
-                            <IconEyeOff size={12} />
-                          )
-                        }
-                      >
-                        {isWindowFocused ? "Focused" : "Not Focused"}
-                      </Badge>
-                    )}
-                  </Group>
-
-                  {/* Focus Loss Indicator */}
-                  <Box mb="xs">
-                    <Group justify="space-between" mb={4}>
-                      <Text size="sm" c="dimmed">
-                        Focus Timeline
-                      </Text>
-                      <Group gap="xs">
-                        <Group gap={4}>
-                          <Box
-                            style={{
-                              width: "12px",
-                              height: "12px",
-                              backgroundColor: "#f8f9fa",
-                              border: "1px solid #e9ecef",
-                              borderRadius: "2px",
-                            }}
-                          />
-                          <Text size="xs" c="dimmed">
-                            Focused
-                          </Text>
-                        </Group>
-                        <Group gap={4}>
-                          <Box
-                            style={{
-                              width: "12px",
-                              height: "12px",
-                              backgroundColor: "#ffc9d6",
-                              borderRadius: "2px",
-                            }}
-                          />
-                          <Text size="xs" c="dimmed">
-                            Unfocused
-                          </Text>
-                        </Group>
-                      </Group>
-                    </Group>
-                    <Box
-                      style={{
-                        position: "relative",
-                        height: "24px",
-                        backgroundColor: "#f8f9fa",
-                        borderRadius: "6px",
-                        border: "1px solid #e9ecef",
-                        overflow: "hidden",
-                      }}
-                    >
-                      {/* Focus loss segments */}
-                      {(() => {
-                        if (!playbackStartTime || totalDuration === 0)
-                          return null;
-
-                        const segments = [];
-                        let currentlyFocused = true;
-                        let lastTime = 0;
-
-                        // Process focus events to create segments
-                        for (const event of focusEvents) {
-                          const eventTime =
-                            new Date(event.timestamp).getTime() -
-                            playbackStartTime.getTime();
-                          const relativePosition =
-                            (eventTime / totalDuration) * 100;
-
-                          // If we're transitioning from unfocused to focused, close the pink segment
-                          if (!currentlyFocused && event.type === "FOCUS_IN") {
-                            const lastPosition =
-                              (lastTime / totalDuration) * 100;
-                            segments.push(
-                              <Box
-                                key={`unfocused-${lastTime}-${eventTime}`}
-                                style={{
-                                  position: "absolute",
-                                  left: `${Math.max(0, lastPosition)}%`,
-                                  width: `${Math.min(100, relativePosition) - Math.max(0, lastPosition)}%`,
-                                  height: "100%",
-                                  backgroundColor: "#ffc9d6",
-                                  borderRadius: "2px",
-                                }}
-                              />,
-                            );
-                          }
-
-                          currentlyFocused = event.type === "FOCUS_IN";
-                          lastTime = eventTime;
-                        }
-
-                        // If we end unfocused, add a final segment
-                        if (!currentlyFocused && lastTime < totalDuration) {
-                          const lastPosition = (lastTime / totalDuration) * 100;
-                          segments.push(
-                            <Box
-                              key={`unfocused-final-${lastTime}`}
-                              style={{
-                                position: "absolute",
-                                left: `${lastPosition}%`,
-                                width: `${100 - lastPosition}%`,
-                                height: "100%",
-                                backgroundColor: "#ffc9d6",
-                                borderRadius: "2px",
-                              }}
-                            />,
-                          );
-                        }
-
-                        return segments;
-                      })()}
-
-                      {/* Current playback position indicator */}
-                      <Box
-                        style={{
-                          position: "absolute",
-                          left: `${totalDuration > 0 ? (playbackTime / totalDuration) * 100 : 0}%`,
-                          width: "3px",
-                          height: "100%",
-                          backgroundColor: "#228be6",
-                          transform: "translateX(-1.5px)",
-                          zIndex: 10,
-                          borderRadius: "1px",
-                          boxShadow: "0 0 2px rgba(34, 139, 230, 0.5)",
-                        }}
-                      />
-                    </Box>
-
-                    {/* Focus Statistics */}
-                    {(() => {
-                      if (
-                        !playbackStartTime ||
-                        totalDuration === 0 ||
-                        focusEvents.length === 0
-                      ) {
-                        return null;
-                      }
-
-                      let totalUnfocusedTime = 0;
-                      let currentlyFocused = true;
-                      let lastTime = 0;
-
-                      for (const event of focusEvents) {
-                        const eventTime =
-                          new Date(event.timestamp).getTime() -
-                          playbackStartTime.getTime();
-
-                        if (!currentlyFocused && event.type === "FOCUS_IN") {
-                          totalUnfocusedTime += eventTime - lastTime;
-                        }
-
-                        currentlyFocused = event.type === "FOCUS_IN";
-                        lastTime = eventTime;
-                      }
-
-                      // If ending unfocused, add remaining time
-                      if (!currentlyFocused) {
-                        totalUnfocusedTime += totalDuration - lastTime;
-                      }
-
-                      const focusPercentage = (
-                        ((totalDuration - totalUnfocusedTime) / totalDuration) *
-                        100
-                      ).toFixed(1);
-                      const unfocusedCount = focusEvents.filter(
-                        (e) => e.type === "FOCUS_OUT",
-                      ).length;
-
-                      return (
-                        <Group justify="space-between" mt={4}>
-                          <Text size="xs" c="dimmed">
-                            Focus: {focusPercentage}% of session
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            Lost focus {unfocusedCount} time
-                            {unfocusedCount !== 1 ? "s" : ""}
-                          </Text>
-                        </Group>
-                      );
-                    })()}
-                  </Box>
-
-                  <Slider
-                    value={playbackTime}
-                    onChange={skipToTime}
-                    max={totalDuration}
-                    min={0}
-                    step={1000}
-                    marks={[
-                      { value: 0, label: "Start" },
-                      { value: totalDuration, label: "End" },
-                    ]}
-                    label={(value) => {
-                      const totalSeconds = Math.floor(value / 1000);
-                      const minutes = Math.floor(totalSeconds / 60);
-                      const seconds = totalSeconds % 60;
-                      return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-                    }}
-                    mb="md"
-                  />
-                </Card>
-
-                {/* Playback Content */}
-                <Card withBorder p="lg">
-                  <Group justify="space-between" mb="md">
-                    <Title order={4}>Live Playback</Title>
-                    <Text size="sm" c="dimmed">
-                      Speed: {playbackSettings.speed}x
-                    </Text>
-                  </Group>
-
-                  <Textarea
-                    ref={playbackTextareaRef}
-                    value={playbackContent}
-                    readOnly
-                    autosize
-                    minRows={20}
-                    maxRows={30}
-                    styles={{
-                      input: {
-                        fontFamily: "Monaco, Menlo, monospace",
-                        fontSize: "14px",
-                        backgroundColor: isWindowFocused
-                          ? "#ffffff"
-                          : "#f1f3f4",
-                        border: isWindowFocused
-                          ? "2px solid #3b82f6"
-                          : "2px solid #ef4444",
-                      },
-                    }}
-                  />
-                </Card>
-              </Stack>
+              <KeystrokePlaybackTab
+                isPlaying={isPlaying}
+                playbackTime={playbackTime}
+                playbackContent={playbackContent}
+                playbackSettings={playbackSettings}
+                isWindowFocused={isWindowFocused}
+                playbackStartTime={playbackStartTime}
+                focusEvents={focusEvents.map((e) => ({
+                  type: e.type,
+                  timestamp: e.timestamp,
+                  content: e.content || undefined,
+                  cursorStart: e.cursorStart || undefined,
+                  cursorEnd: e.cursorEnd || undefined,
+                }))}
+                totalDuration={totalDuration}
+                startPlayback={startPlayback}
+                pausePlayback={pausePlayback}
+                skipToTime={skipToTime}
+                resetPlayback={resetPlayback}
+                openSettings={openSettings}
+                playbackTextareaRef={playbackTextareaRef}
+              />
             </Tabs.Panel>
 
             {/* Event Timeline Tab */}
             <Tabs.Panel value="timeline" pt="lg">
-              <Card withBorder p="lg">
-                <Title order={3} mb="md">
-                  Event Timeline
-                </Title>
-
-                {events.length === 0 ? (
-                  <Text c="dimmed" ta="center" py="xl">
-                    No events recorded for this submission.
-                  </Text>
-                ) : (
-                  <Stack gap="lg">
-                    {/* Summary Stats */}
-                    <Group>
-                      <Text size="sm">
-                        <strong>{contentSnapshots.length}</strong> content
-                        snapshots
-                      </Text>
-                      <Text size="sm">
-                        <strong>{focusEvents.length}</strong> focus changes
-                      </Text>
-                      <Text size="sm">
-                        <strong>{formatDuration(totalDuration)}</strong> total
-                        duration
-                      </Text>
-                    </Group>
-
-                    <Timeline active={-1} bulletSize={24} lineWidth={2}>
-                      {events.map((event, index) => {
-                        const EventIcon = getEventIcon(event.type);
-                        const eventTime = playbackStartTime
-                          ? new Date(event.timestamp).getTime() -
-                            playbackStartTime.getTime()
-                          : 0;
-
-                        return (
-                          <Timeline.Item
-                            key={`${event.type}-${event.timestamp}-${index}`}
-                            bullet={<EventIcon size={12} />}
-                            color={getEventColor(event.type)}
-                            title={
-                              <Group gap="xs">
-                                <Text size="sm" fw={500}>
-                                  {event.type === "CONTENT_SNAPSHOT"
-                                    ? "Content Update"
-                                    : event.type
-                                        .replace("_", " ")
-                                        .toLowerCase()}
-                                </Text>
-                                <Text size="xs" c="dimmed">
-                                  +{formatDuration(eventTime)}
-                                </Text>
-                                <Text size="xs" c="dimmed">
-                                  ({formatTime(event.timestamp.toString())})
-                                </Text>
-                              </Group>
-                            }
-                          >
-                            {event.type === "CONTENT_SNAPSHOT" &&
-                              event.content && (
-                                <Stack gap="xs" mt="xs">
-                                  <Text size="xs" c="dimmed">
-                                    Content length: {event.content.length}{" "}
-                                    characters
-                                  </Text>
-                                  {event.content.length > 100 ? (
-                                    <Code block>
-                                      {event.content.substring(0, 100)}...
-                                    </Code>
-                                  ) : (
-                                    <Code block>
-                                      {event.content || "(empty)"}
-                                    </Code>
-                                  )}
-                                </Stack>
-                              )}
-                            {event.cursorStart && (
-                              <Text size="xs" c="dimmed" mt="xs">
-                                Cursor position: {event.cursorStart}
-                                {event.cursorEnd &&
-                                  event.cursorEnd !== event.cursorStart &&
-                                  ` (selection: ${event.cursorEnd - event.cursorStart} chars)`}
-                              </Text>
-                            )}
-                            {(event.type === "FOCUS_OUT" ||
-                              event.type === "FOCUS_IN") && (
-                              <Text size="xs" c="dimmed" mt="xs">
-                                Window{" "}
-                                {event.type === "FOCUS_IN" ? "gained" : "lost"}{" "}
-                                focus
-                              </Text>
-                            )}
-                          </Timeline.Item>
-                        );
-                      })}
-                    </Timeline>
-                  </Stack>
-                )}
-              </Card>
+              <EventTimelineTab
+                events={events.map((e) => ({
+                  type: e.type,
+                  timestamp: e.timestamp,
+                  content: e.content || undefined,
+                  cursorStart: e.cursorStart || undefined,
+                  cursorEnd: e.cursorEnd || undefined,
+                }))}
+                contentSnapshots={contentSnapshots.map((e) => ({
+                  type: e.type,
+                  timestamp: e.timestamp,
+                  content: e.content || undefined,
+                  cursorStart: e.cursorStart || undefined,
+                  cursorEnd: e.cursorEnd || undefined,
+                }))}
+                focusEvents={focusEvents.map((e) => ({
+                  type: e.type,
+                  timestamp: e.timestamp,
+                  content: e.content || undefined,
+                  cursorStart: e.cursorStart || undefined,
+                  cursorEnd: e.cursorEnd || undefined,
+                }))}
+                totalDuration={totalDuration}
+                playbackStartTime={playbackStartTime}
+              />
             </Tabs.Panel>
 
             {/* Comments Tab */}
             <Tabs.Panel value="comments" pt="lg">
-              <Stack gap="md">
-                {/* Add Comment */}
-                <Card withBorder p="lg">
-                  <Title order={4} mb="md">
-                    Add Comment
-                  </Title>
-                  <form onSubmit={commentForm.onSubmit(handleAddComment)}>
-                    <Stack gap="md">
-                      <Textarea
-                        placeholder="Write your review comments here..."
-                        autosize
-                        minRows={3}
-                        {...commentForm.getInputProps("content")}
-                      />
-                      <Group justify="flex-end">
-                        <Button
-                          type="submit"
-                          leftSection={<IconSend size={16} />}
-                          loading={addCommentMutation.isPending}
-                        >
-                          Add Comment
-                        </Button>
-                      </Group>
-                    </Stack>
-                  </form>
-                </Card>
-
-                {/* Comments List */}
-                <Card withBorder p="lg">
-                  <Title order={4} mb="md">
-                    Review Comments
-                  </Title>
-
-                  {submission.comments.length === 0 ? (
-                    <Text c="dimmed" ta="center" py="xl">
-                      No comments yet. Add the first comment to start the review
-                      discussion.
-                    </Text>
-                  ) : (
-                    <Stack gap="md">
-                      {submission.comments.map((comment) => (
-                        <div key={comment.id}>
-                          <Group mb="xs">
-                            <Avatar size="sm" radius="xl">
-                              {comment.author.name?.charAt(0).toUpperCase()}
-                            </Avatar>
-                            <div>
-                              <Text size="sm" fw={500}>
-                                {comment.author.name}
-                              </Text>
-                              <Text size="xs" c="dimmed">
-                                {new Date(comment.createdAt).toLocaleString()}
-                              </Text>
-                            </div>
-                          </Group>
-                          <Text
-                            size="sm"
-                            style={{
-                              marginLeft:
-                                "calc(var(--mantine-spacing-sm) + 32px)",
-                              whiteSpace: "pre-wrap",
-                            }}
-                          >
-                            {comment.content}
-                          </Text>
-                          {comment.id !==
-                            submission.comments[submission.comments.length - 1]
-                              ?.id && <Divider my="md" />}
-                        </div>
-                      ))}
-                    </Stack>
-                  )}
-                </Card>
-              </Stack>
+              <CommentsTab
+                comments={submission.comments.map((c) => ({
+                  id: c.id,
+                  content: c.content,
+                  createdAt: c.createdAt,
+                  author: {
+                    name: c.author.name || undefined,
+                  },
+                }))}
+                onAddComment={handleAddComment}
+                isAddingComment={addCommentMutation.isPending}
+              />
             </Tabs.Panel>
           </Tabs>
 
-          {/* Playback Settings Modal */}
-          <Modal
+          <PlaybackSettingsModal
             opened={settingsOpened}
             onClose={closeSettings}
-            title="Playback Settings"
-            size="sm"
-          >
-            <Stack gap="md">
-              <div>
-                <Text size="sm" fw={500} mb="xs">
-                  Playback Speed
-                </Text>
-                <Select
-                  data={[
-                    { value: "0.25", label: "0.25x" },
-                    { value: "0.5", label: "0.5x" },
-                    { value: "1", label: "1x (Normal)" },
-                    { value: "2", label: "2x" },
-                    { value: "4", label: "4x" },
-                    { value: "8", label: "8x" },
-                  ]}
-                  value={playbackSettings.speed.toString()}
-                  onChange={(value) =>
-                    setPlaybackSettings({
-                      ...playbackSettings,
-                      speed: Number.parseFloat(value || "1"),
-                    })
-                  }
-                />
-              </div>
-
-              <Text size="sm" c="dimmed">
-                Adjust playback speed to review the submission at your preferred
-                pace.
-              </Text>
-
-              <Group justify="flex-end" mt="md">
-                <Button onClick={closeSettings}>Done</Button>
-              </Group>
-            </Stack>
-          </Modal>
+            settings={playbackSettings}
+            onSettingsChange={setPlaybackSettings}
+          />
         </Stack>
       </Container>
     </AppShellLayout>
