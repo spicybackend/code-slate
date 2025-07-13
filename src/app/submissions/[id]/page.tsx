@@ -101,16 +101,12 @@ export default function SubmissionDetailPage() {
     (e) => e.type === "FOCUS_IN" || e.type === "FOCUS_OUT",
   );
 
-  // Calculate total duration based on first and last events, plus buffer for final submission
-  const eventsDuration =
+  // Calculate total duration based on first and last events
+  const totalDuration =
     events.length > 0
       ? new Date(events[events.length - 1]?.timestamp || 0).getTime() -
         new Date(events[0]?.timestamp || 0).getTime()
       : 0;
-
-  // Add 30 seconds buffer to allow viewing final submission
-  const finalSubmissionBuffer = 30000; // 30 seconds in milliseconds
-  const totalDuration = eventsDuration + finalSubmissionBuffer;
 
   // Playback functions
   const resetPlayback = useCallback(() => {
@@ -156,21 +152,16 @@ export default function SubmissionDetailPage() {
         playbackStartTime.getTime() + targetTime,
       );
 
-      // Check if playback time exceeds all events
-      const lastEventTime =
-        events.length > 0
-          ? new Date(events[events.length - 1]?.timestamp || 0)
-          : null;
-
-      const isAfterAllEvents = lastEventTime && targetTimestamp > lastEventTime;
-      setIsShowingFinalSubmission(!!isAfterAllEvents);
+      // Check if playback time is at the maximum (end of events) to show final submission
+      const isAtMaxTime = targetTime >= totalDuration && totalDuration > 0;
+      setIsShowingFinalSubmission(isAtMaxTime);
 
       // Update content and cursor
       let newContent = "";
       let newCursorPos = 0;
 
-      if (isAfterAllEvents && submission?.content) {
-        // Show final submission content when beyond last event
+      if (isAtMaxTime && submission?.content) {
+        // Show final submission content when at max time
         newContent = submission.content;
         newCursorPos = newContent.length;
       } else {
@@ -214,7 +205,7 @@ export default function SubmissionDetailPage() {
       contentSnapshots,
       focusEvents,
       playbackSettings,
-      events,
+      totalDuration,
       submission?.content,
     ],
   );
@@ -400,7 +391,6 @@ export default function SubmissionDetailPage() {
                   cursorEnd: e.cursorEnd || undefined,
                 }))}
                 totalDuration={totalDuration}
-                eventsDuration={eventsDuration}
                 startPlayback={startPlayback}
                 pausePlayback={pausePlayback}
                 skipToTime={skipToTime}
@@ -434,7 +424,7 @@ export default function SubmissionDetailPage() {
                   cursorStart: e.cursorStart || undefined,
                   cursorEnd: e.cursorEnd || undefined,
                 }))}
-                eventsDuration={eventsDuration}
+                totalDuration={totalDuration}
                 playbackStartTime={playbackStartTime}
               />
             </Tabs.Panel>

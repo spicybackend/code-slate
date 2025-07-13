@@ -53,7 +53,6 @@ interface KeystrokePlaybackTabProps {
   // Events data
   focusEvents: Event[];
   totalDuration: number;
-  eventsDuration: number;
 
   // Control functions
   startPlayback: () => void;
@@ -84,7 +83,6 @@ export function KeystrokePlaybackTab({
   isShowingFinalSubmission,
   focusEvents,
   totalDuration,
-  eventsDuration,
   startPlayback,
   pausePlayback,
   skipToTime,
@@ -214,7 +212,7 @@ export function KeystrokePlaybackTab({
           >
             {/* Focus loss segments */}
             {(() => {
-              if (!playbackStartTime || eventsDuration === 0) return null;
+              if (!playbackStartTime || totalDuration === 0) return null;
 
               const segments = [];
               let currentlyFocused = true;
@@ -225,11 +223,11 @@ export function KeystrokePlaybackTab({
                 const eventTime =
                   new Date(event.timestamp).getTime() -
                   playbackStartTime.getTime();
-                const relativePosition = (eventTime / eventsDuration) * 100;
+                const relativePosition = (eventTime / totalDuration) * 100;
 
                 // If we're transitioning from unfocused to focused, close the pink segment
                 if (!currentlyFocused && event.type === "FOCUS_IN") {
-                  const lastPosition = (lastTime / eventsDuration) * 100;
+                  const lastPosition = (lastTime / totalDuration) * 100;
                   segments.push(
                     <Box
                       key={`unfocused-${lastTime}-${eventTime}`}
@@ -250,15 +248,15 @@ export function KeystrokePlaybackTab({
               }
 
               // If we end unfocused, add a final segment
-              if (!currentlyFocused && lastTime < eventsDuration) {
-                const lastPosition = (lastTime / eventsDuration) * 100;
+              if (!currentlyFocused && lastTime < totalDuration) {
+                const lastPosition = (lastTime / totalDuration) * 100;
                 segments.push(
                   <Box
                     key={`unfocused-final-${lastTime}`}
                     style={{
                       position: "absolute",
                       left: `${lastPosition}%`,
-                      width: `${((eventsDuration - lastTime) / eventsDuration) * 100}%`,
+                      width: `${100 - lastPosition}%`,
                       height: "100%",
                       backgroundColor: "#ffc9d6",
                       borderRadius: "2px",
@@ -289,7 +287,7 @@ export function KeystrokePlaybackTab({
           {(() => {
             if (
               !playbackStartTime ||
-              eventsDuration === 0 ||
+              totalDuration === 0 ||
               focusEvents.length === 0
             ) {
               return null;
@@ -314,11 +312,11 @@ export function KeystrokePlaybackTab({
 
             // If ending unfocused, add remaining time
             if (!currentlyFocused) {
-              totalUnfocusedTime += eventsDuration - lastTime;
+              totalUnfocusedTime += totalDuration - lastTime;
             }
 
             const focusPercentage = (
-              ((eventsDuration - totalUnfocusedTime) / eventsDuration) *
+              ((totalDuration - totalUnfocusedTime) / totalDuration) *
               100
             ).toFixed(1);
             const unfocusedCount = focusEvents.filter(
@@ -346,8 +344,7 @@ export function KeystrokePlaybackTab({
           min={0}
           marks={[
             { value: 0, label: "Start" },
-            { value: eventsDuration, label: "End" },
-            { value: totalDuration, label: "Submit" },
+            { value: totalDuration, label: "End" },
           ]}
           label={(value) => {
             const totalSeconds = Math.floor(value / 1000);
@@ -365,7 +362,7 @@ export function KeystrokePlaybackTab({
           <Title order={4}>Live Playback</Title>
           <Group gap="sm">
             {isShowingFinalSubmission && (
-              <Tooltip label="Showing the final submitted code (playback has gone beyond recorded events)">
+              <Tooltip label="Showing the final submitted code (slider is at maximum position)">
                 <Badge color="blue" variant="light">
                   Final Submission
                 </Badge>
