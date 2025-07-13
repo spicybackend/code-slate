@@ -118,6 +118,7 @@ export const submissionRouter = createTRPCRouter({
       z.object({
         token: z.string(),
         content: z.string(),
+        language: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -150,6 +151,7 @@ export const submissionRouter = createTRPCRouter({
       // Update submission status if it's the first time
       const updateData: {
         content: string;
+        language?: string;
         updatedAt: Date;
         status?: "IN_PROGRESS";
         startedAt?: Date;
@@ -157,6 +159,10 @@ export const submissionRouter = createTRPCRouter({
         content: input.content,
         updatedAt: new Date(),
       };
+
+      if (input.language) {
+        updateData.language = input.language;
+      }
 
       if (submission.status === "NOT_STARTED") {
         updateData.status = "IN_PROGRESS";

@@ -136,6 +136,7 @@ model Candidate {
 model Submission {
   id             String           @id @default(cuid())
   content        String
+  language       String           @default("jsx")
   status         SubmissionStatus @default(NOT_STARTED)
   startedAt      DateTime?
   submittedAt    DateTime?

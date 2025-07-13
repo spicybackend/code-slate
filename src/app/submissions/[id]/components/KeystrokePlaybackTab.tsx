@@ -10,21 +10,20 @@ import {
   Slider,
   Stack,
   Text,
-  Textarea,
   Title,
+  Tooltip,
 } from "@mantine/core";
 import {
   IconEye,
   IconEyeOff,
   IconPlayerPause,
   IconPlayerPlay,
-  IconPlayerSkipBack,
-  IconPlayerSkipForward,
   IconRestore,
   IconRewindBackward30,
   IconRewindForward30,
   IconSettings,
 } from "@tabler/icons-react";
+import CodeEditor from "@uiw/react-textarea-code-editor";
 
 interface PlaybackSettings {
   speed: number;
@@ -48,10 +47,13 @@ interface KeystrokePlaybackTabProps {
   playbackSettings: PlaybackSettings;
   isWindowFocused: boolean;
   playbackStartTime: Date | null;
+  language: string;
+  isShowingFinalSubmission: boolean;
 
   // Events data
   focusEvents: Event[];
   totalDuration: number;
+  eventsDuration: number;
 
   // Control functions
   startPlayback: () => void;
@@ -78,8 +80,11 @@ export function KeystrokePlaybackTab({
   playbackSettings,
   isWindowFocused,
   playbackStartTime,
+  language,
+  isShowingFinalSubmission,
   focusEvents,
   totalDuration,
+  eventsDuration,
   startPlayback,
   pausePlayback,
   skipToTime,
@@ -209,7 +214,7 @@ export function KeystrokePlaybackTab({
           >
             {/* Focus loss segments */}
             {(() => {
-              if (!playbackStartTime || totalDuration === 0) return null;
+              if (!playbackStartTime || eventsDuration === 0) return null;
 
               const segments = [];
               let currentlyFocused = true;
@@ -220,11 +225,11 @@ export function KeystrokePlaybackTab({
                 const eventTime =
                   new Date(event.timestamp).getTime() -
                   playbackStartTime.getTime();
-                const relativePosition = (eventTime / totalDuration) * 100;
+                const relativePosition = (eventTime / eventsDuration) * 100;
 
                 // If we're transitioning from unfocused to focused, close the pink segment
                 if (!currentlyFocused && event.type === "FOCUS_IN") {
-                  const lastPosition = (lastTime / totalDuration) * 100;
+                  const lastPosition = (lastTime / eventsDuration) * 100;
                   segments.push(
                     <Box
                       key={`unfocused-${lastTime}-${eventTime}`}
@@ -245,15 +250,15 @@ export function KeystrokePlaybackTab({
               }
 
               // If we end unfocused, add a final segment
-              if (!currentlyFocused && lastTime < totalDuration) {
-                const lastPosition = (lastTime / totalDuration) * 100;
+              if (!currentlyFocused && lastTime < eventsDuration) {
+                const lastPosition = (lastTime / eventsDuration) * 100;
                 segments.push(
                   <Box
                     key={`unfocused-final-${lastTime}`}
                     style={{
                       position: "absolute",
                       left: `${lastPosition}%`,
-                      width: `${100 - lastPosition}%`,
+                      width: `${((eventsDuration - lastTime) / eventsDuration) * 100}%`,
                       height: "100%",
                       backgroundColor: "#ffc9d6",
                       borderRadius: "2px",
@@ -284,7 +289,7 @@ export function KeystrokePlaybackTab({
           {(() => {
             if (
               !playbackStartTime ||
-              totalDuration === 0 ||
+              eventsDuration === 0 ||
               focusEvents.length === 0
             ) {
               return null;
@@ -309,11 +314,11 @@ export function KeystrokePlaybackTab({
 
             // If ending unfocused, add remaining time
             if (!currentlyFocused) {
-              totalUnfocusedTime += totalDuration - lastTime;
+              totalUnfocusedTime += eventsDuration - lastTime;
             }
 
             const focusPercentage = (
-              ((totalDuration - totalUnfocusedTime) / totalDuration) *
+              ((eventsDuration - totalUnfocusedTime) / eventsDuration) *
               100
             ).toFixed(1);
             const unfocusedCount = focusEvents.filter(
@@ -339,10 +344,10 @@ export function KeystrokePlaybackTab({
           onChange={skipToTime}
           max={totalDuration}
           min={0}
-          step={1000}
           marks={[
             { value: 0, label: "Start" },
-            { value: totalDuration, label: "End" },
+            { value: eventsDuration, label: "End" },
+            { value: totalDuration, label: "Submit" },
           ]}
           label={(value) => {
             const totalSeconds = Math.floor(value / 1000);
@@ -358,27 +363,34 @@ export function KeystrokePlaybackTab({
       <Card withBorder p="lg">
         <Group justify="space-between" mb="md">
           <Title order={4}>Live Playback</Title>
-          <Text size="sm" c="dimmed">
-            Speed: {playbackSettings.speed}x
-          </Text>
+          <Group gap="sm">
+            {isShowingFinalSubmission && (
+              <Tooltip label="Showing the final submitted code (playback has gone beyond recorded events)">
+                <Badge color="blue" variant="light">
+                  Final Submission
+                </Badge>
+              </Tooltip>
+            )}
+            <Text size="sm" c="dimmed">
+              Speed: {playbackSettings.speed}x
+            </Text>
+          </Group>
         </Group>
 
-        <Textarea
+        <CodeEditor
           ref={playbackTextareaRef}
           value={playbackContent}
+          language={language}
           readOnly
-          autosize
-          minRows={20}
-          maxRows={30}
-          styles={{
-            input: {
-              fontFamily: "Monaco, Menlo, monospace",
-              fontSize: "14px",
-              backgroundColor: isWindowFocused ? "#ffffff" : "#f1f3f4",
-              border: isWindowFocused
-                ? "2px solid #3b82f6"
-                : "2px solid #ef4444",
-            },
+          padding={15}
+          data-color-mode="light"
+          style={{
+            fontSize: 14,
+            fontFamily: "Monaco, Menlo, monospace",
+            backgroundColor: isWindowFocused ? "#ffffff" : "#f1f3f4",
+            border: isWindowFocused ? "2px solid #3b82f6" : "2px solid #ef4444",
+            borderRadius: "6px",
+            minHeight: "500px",
           }}
         />
       </Card>

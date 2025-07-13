@@ -39,6 +39,8 @@ export default function SubmissionDetailPage() {
   });
   const [isWindowFocused, setIsWindowFocused] = useState(true);
   const [playbackStartTime, setPlaybackStartTime] = useState<Date | null>(null);
+  const [isShowingFinalSubmission, setIsShowingFinalSubmission] =
+    useState(false);
 
   // UI state
   const [activeTab, setActiveTab] = useState<string | null>("review");
@@ -99,12 +101,16 @@ export default function SubmissionDetailPage() {
     (e) => e.type === "FOCUS_IN" || e.type === "FOCUS_OUT",
   );
 
-  // Calculate total duration based on first and last events
-  const totalDuration =
+  // Calculate total duration based on first and last events, plus buffer for final submission
+  const eventsDuration =
     events.length > 0
       ? new Date(events[events.length - 1]?.timestamp || 0).getTime() -
         new Date(events[0]?.timestamp || 0).getTime()
       : 0;
+
+  // Add 30 seconds buffer to allow viewing final submission
+  const finalSubmissionBuffer = 30000; // 30 seconds in milliseconds
+  const totalDuration = eventsDuration + finalSubmissionBuffer;
 
   // Playback functions
   const resetPlayback = useCallback(() => {
@@ -140,7 +146,7 @@ export default function SubmissionDetailPage() {
         playbackTextareaRef.current.setSelectionRange(0, 0);
       }
     }
-  }, [events, contentSnapshots, focusEvents, playbackSettings]);
+  }, [events, focusEvents, playbackSettings]);
 
   const updatePlaybackAtTime = useCallback(
     (targetTime: number) => {
@@ -150,18 +156,33 @@ export default function SubmissionDetailPage() {
         playbackStartTime.getTime() + targetTime,
       );
 
-      // Find the most recent content snapshot before or at target time
-      const relevantSnapshot = [...contentSnapshots]
-        .reverse()
-        .find((event) => new Date(event.timestamp) <= targetTimestamp);
+      // Check if playback time exceeds all events
+      const lastEventTime =
+        events.length > 0
+          ? new Date(events[events.length - 1]?.timestamp || 0)
+          : null;
+
+      const isAfterAllEvents = lastEventTime && targetTimestamp > lastEventTime;
+      setIsShowingFinalSubmission(!!isAfterAllEvents);
 
       // Update content and cursor
       let newContent = "";
       let newCursorPos = 0;
 
-      if (relevantSnapshot) {
-        newContent = relevantSnapshot.content || "";
-        newCursorPos = relevantSnapshot.cursorStart || 0;
+      if (isAfterAllEvents && submission?.content) {
+        // Show final submission content when beyond last event
+        newContent = submission.content;
+        newCursorPos = newContent.length;
+      } else {
+        // Find the most recent content snapshot before or at target time
+        const relevantSnapshot = [...contentSnapshots]
+          .reverse()
+          .find((event) => new Date(event.timestamp) <= targetTimestamp);
+
+        if (relevantSnapshot) {
+          newContent = relevantSnapshot.content || "";
+          newCursorPos = relevantSnapshot.cursorStart || 0;
+        }
       }
 
       setPlaybackContent(newContent);
@@ -188,7 +209,14 @@ export default function SubmissionDetailPage() {
         }
       }
     },
-    [playbackStartTime, contentSnapshots, focusEvents, playbackSettings],
+    [
+      playbackStartTime,
+      contentSnapshots,
+      focusEvents,
+      playbackSettings,
+      events,
+      submission?.content,
+    ],
   );
 
   const startPlayback = () => {
@@ -347,7 +375,10 @@ export default function SubmissionDetailPage() {
 
             {/* Code Review Tab */}
             <Tabs.Panel value="review" pt="lg">
-              <CodeReviewTab content={submission.content} />
+              <CodeReviewTab
+                content={submission.content}
+                language={submission.language || "jsx"}
+              />
             </Tabs.Panel>
 
             {/* Keystroke Playback Tab */}
@@ -359,6 +390,8 @@ export default function SubmissionDetailPage() {
                 playbackSettings={playbackSettings}
                 isWindowFocused={isWindowFocused}
                 playbackStartTime={playbackStartTime}
+                language={submission.language || "jsx"}
+                isShowingFinalSubmission={isShowingFinalSubmission}
                 focusEvents={focusEvents.map((e) => ({
                   type: e.type,
                   timestamp: e.timestamp,
@@ -367,6 +400,7 @@ export default function SubmissionDetailPage() {
                   cursorEnd: e.cursorEnd || undefined,
                 }))}
                 totalDuration={totalDuration}
+                eventsDuration={eventsDuration}
                 startPlayback={startPlayback}
                 pausePlayback={pausePlayback}
                 skipToTime={skipToTime}
@@ -400,7 +434,7 @@ export default function SubmissionDetailPage() {
                   cursorStart: e.cursorStart || undefined,
                   cursorEnd: e.cursorEnd || undefined,
                 }))}
-                totalDuration={totalDuration}
+                eventsDuration={eventsDuration}
                 playbackStartTime={playbackStartTime}
               />
             </Tabs.Panel>

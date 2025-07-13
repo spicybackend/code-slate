@@ -21,6 +21,7 @@ import {
 } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
+import type { SubmissionStatus } from "@prisma/client";
 import {
   IconAlertCircle,
   IconCheck,
@@ -63,7 +64,7 @@ function Submissions() {
     isLoading,
     refetch,
   } = api.submission.getAll.useQuery({
-    status: statusFilter as any,
+    status: statusFilter as SubmissionStatus,
     challengeId: challengeFilter || undefined,
     limit: pageSize,
   });

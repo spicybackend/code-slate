@@ -1,29 +1,32 @@
 "use client";
 
-import { Card, Textarea, Title } from "@mantine/core";
+import { Card, Title } from "@mantine/core";
+import CodeEditor from "@uiw/react-textarea-code-editor";
 
 interface CodeReviewTabProps {
   content: string;
+  language: string;
 }
 
-export function CodeReviewTab({ content }: CodeReviewTabProps) {
+export function CodeReviewTab({ content, language }: CodeReviewTabProps) {
+  console.log({ language, content });
   return (
     <Card withBorder p="lg">
       <Title order={3} mb="md">
         Final Submission
       </Title>
-      <Textarea
+      <CodeEditor
         value={content}
+        language={language}
         readOnly
-        autosize
-        minRows={20}
-        maxRows={30}
-        styles={{
-          input: {
-            fontFamily: "Monaco, Menlo, monospace",
-            fontSize: "14px",
-            backgroundColor: "#f8f9fa",
-          },
+        padding={15}
+        data-color-mode="light"
+        style={{
+          fontSize: 14,
+          fontFamily: "Monaco, Menlo, monospace",
+          backgroundColor: "#f8f9fa",
+          borderRadius: "6px",
+          minHeight: "500px",
         }}
       />
     </Card>

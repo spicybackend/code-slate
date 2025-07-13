@@ -29,6 +29,11 @@ import CodeEditor from "@uiw/react-textarea-code-editor";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  DEFAULT_LANGUAGE,
+  LANGUAGE_OPTIONS,
+  type LanguageValue,
+} from "~/constants/languages";
+import {
   AUTO_SAVE_INTERVAL,
   CONTENT_SNAPSHOT_INTERVAL,
   TYPING_INDICATOR_TIMEOUT,
@@ -44,26 +49,12 @@ interface KeystrokeEvent {
   windowFocus: boolean;
 }
 
-const LANGUAGE_OPTIONS = [
-  { value: "jsx", label: "JavaScript (JSX)" },
-  { value: "tsx", label: "TypeScript (TSX)" },
-  { value: "java", label: "Java" },
-  { value: "csharp", label: "C#" },
-  { value: "python", label: "Python" },
-  { value: "ruby", label: "Ruby" },
-  { value: "cpp", label: "C++" },
-  { value: "go", label: "Go" },
-  { value: "rust", label: "Rust" },
-  { value: "php", label: "PHP" },
-  { value: "swift", label: "Swift" },
-];
-
 export default function ChallengePage() {
   const params = useParams();
   const token = params.token as string;
 
   const [content, setContent] = useState("");
-  const [language, setLanguage] = useState("jsx");
+  const [language, setLanguage] = useState<LanguageValue>(DEFAULT_LANGUAGE);
   const [_events, setEvents] = useState<KeystrokeEvent[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -141,6 +132,9 @@ export default function ChallengePage() {
       setContent(submission.content);
       setLastContentSnapshot(submission.content);
       lastSavedContentRef.current = submission.content;
+    }
+    if (submission?.language) {
+      setLanguage((submission.language as LanguageValue) || DEFAULT_LANGUAGE);
     }
     if (submission?.status === "SUBMITTED") {
       setIsSubmitted(true);
@@ -267,6 +261,7 @@ export default function ChallengePage() {
             {
               token,
               content,
+              language,
             },
             {
               onSuccess: () => {
@@ -284,7 +279,18 @@ export default function ChallengePage() {
         contentSaveIntervalRef.current = null;
       }
     };
-  }, [content, token, isSubmitted]);
+  }, [content, token, isSubmitted, language]);
+
+  // Auto-save language changes
+  useEffect(() => {
+    if (!isSubmitted && submission?.language !== language) {
+      updateContentMutationRef.current.mutate({
+        token,
+        content,
+        language,
+      });
+    }
+  }, [language, token, isSubmitted, submission?.language, content]);
 
   // Code editor event handlers
   const handleCodeChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -481,7 +487,9 @@ export default function ChallengePage() {
               <Select
                 data={LANGUAGE_OPTIONS}
                 value={language}
-                onChange={(value) => setLanguage(value || "jsx")}
+                onChange={(value) =>
+                  setLanguage((value as LanguageValue) || DEFAULT_LANGUAGE)
+                }
                 disabled={isSubmitted || isTimeUp}
                 w={180}
                 placeholder="Select language"

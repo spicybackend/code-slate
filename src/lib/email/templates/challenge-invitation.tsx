@@ -60,10 +60,8 @@ export const ChallengeInvitationEmail = ({
           </Text>
 
           <Section style={challengeSection}>
-            <Text style={challengeTitle as any}>{challengeTitle}</Text>
-            <Text style={challengeDescription as any}>
-              {challengeDescription}
-            </Text>
+            <Text>{challengeTitle}</Text>
+            <Text>{challengeDescription}</Text>
           </Section>
 
           {timeLimit && (

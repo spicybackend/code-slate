@@ -20,7 +20,7 @@ interface EventTimelineTabProps {
   events: Event[];
   contentSnapshots: Event[];
   focusEvents: Event[];
-  totalDuration: number;
+  eventsDuration: number;
   playbackStartTime: Date | null;
 }
 
@@ -65,7 +65,7 @@ export function EventTimelineTab({
   events,
   contentSnapshots,
   focusEvents,
-  totalDuration,
+  eventsDuration,
   playbackStartTime,
 }: EventTimelineTabProps) {
   if (events.length === 0) {
@@ -97,7 +97,7 @@ export function EventTimelineTab({
             <strong>{focusEvents.length}</strong> focus changes
           </Text>
           <Text size="sm">
-            <strong>{formatDuration(totalDuration)}</strong> total duration
+            <strong>{formatDuration(eventsDuration)}</strong> total duration
           </Text>
         </Group>
 

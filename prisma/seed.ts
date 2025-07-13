@@ -60,7 +60,7 @@ fizzBuzz(15) should return:
 \`\`\`
 
 ## Requirements
-- Write your solution in JavaScript or TypeScript
+- Write your solution in TypeScript
 - Include proper error handling
 - Add comments explaining your logic
       `.trim(),
@@ -90,8 +90,8 @@ fizzBuzz(15) should return:
   // Create a sample submission with some keystroke events
   const submission = await prisma.submission.create({
     data: {
-      content: `function fizzBuzz(n) {
-  const result = [];
+      content: `function fizzBuzz(n: number): string[] {
+  const result: string[] = [];
 
   for (let i = 1; i <= n; i++) {
     if (i % 15 === 0) {
@@ -107,6 +107,7 @@ fizzBuzz(15) should return:
 
   return result;
 }`,
+      language: "tsx",
       status: "SUBMITTED",
       challengeId: challenge.id,
       candidateId: candidate.id,
