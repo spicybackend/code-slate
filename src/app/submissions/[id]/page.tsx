@@ -773,6 +773,12 @@ export default function SubmissionDetailPage() {
                       { value: 0, label: "Start" },
                       { value: totalDuration, label: "End" },
                     ]}
+                    label={(value) => {
+                      const totalSeconds = Math.floor(value / 1000);
+                      const minutes = Math.floor(totalSeconds / 60);
+                      const seconds = totalSeconds % 60;
+                      return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+                    }}
                     mb="md"
                   />
                 </Card>
